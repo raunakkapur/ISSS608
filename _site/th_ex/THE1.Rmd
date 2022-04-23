@@ -70,8 +70,9 @@ d<-data%>%mutate(agegroup=case_when(age<30~"Below 30",
                                     age>=30 &age<40~"30-39",
                                     age>=40 &age<50~"40-49",
                                     age>=50 ~"50 and above"))
-x_selected<-d%>%select(participantId,householdSize,haveKids,agegroup,educationLevel)
+x_selected<-d%>%select(participantId,householdSize,haveKids,age,agegroup,educationLevel)%>%arrange(age)
 paged_table(x_selected)
+
 ```
 
 <b>2. Reordering haveKids</b>
@@ -194,10 +195,9 @@ ggplot(data = AgeGroup_EducationLevel,
   geom_col()+
   geom_text(aes(label=paste0(percent,"%")),position = position_stack(vjust = 0.5),size=3)+
   theme(axis.text.x  = element_text(angle=0))+
-  scale_y_continuous(breaks = NULL)+
   coord_flip()+
   xlab("Age Group")+
-  ylab(NULL)+
+  ylab("% of participants")+
   ggtitle("How well educated are the participants?") +
   theme_bw()+
   guides(fill = guide_legend(title = "Education Level"),shape = guide_legend(override.aes = list(size = 0.5)))+
@@ -208,13 +208,16 @@ ggplot(data = AgeGroup_EducationLevel,
 
 Since there are 2 categorical variables in question, Mosaic plot can also be explored.
 
+
 ```{r}
+d[['agegroup']]=factor(d[['agegroup']],levels=c("Below 30","30-39","40-49","50 and above"))
 ggplot(data = d) +
-  geom_mosaic(aes(x = product(agegroup), fill=educationLevel)) +
+  geom_mosaic(aes(x = product(agegroup,educationLevel), fill=agegroup)) +
   labs(title='How well educated are the participants?')+
-  ylab("")+
-  xlab("Age Group")+
+  ylab("Age Group")+
+  xlab("Education Level")+
   guides(fill = guide_legend(title = "Education Level"),shape = guide_legend(override.aes = list(size = 0.5)))+
+  theme_bw()+
   theme(plot.title = element_text(hjust = 0.5,size = 13),legend.title = element_text(size = 9),legend.text = element_text(size = 7))
 ```
 
@@ -341,7 +344,7 @@ barchart<-ggplot(z, aes(x=as.character(householdSize),y=n)) +
   theme_classic()
 
 c<-ggarrange(doughnutchart,barchart)
-annotate_figure(c,top = text_grob("Doughnut vs Bar", 
+annotate_figure(c,top = text_grob("Doughnut vs Bar-The better one", 
               face = "bold", size = 14))
 ```
 
@@ -400,7 +403,7 @@ ggplot(data=d,aes(y=joviality*100,x=Kids_Reordered))+
   geom_boxplot()+
   facet_wrap(~interestGroup,nrow = 2)+
   geom_point(stat="summary",fun.y="mean",colour='red',size=1)+
-  xlab("")+
+  xlab("Kids")+
   ylab("Joviality (*0.01)")+
   theme(axis.text.x  = element_text(angle=0),plot.title = element_text(hjust = 0.5,size = 10))+
   ggtitle("Are Participants with kids based on each interest group happy?")+

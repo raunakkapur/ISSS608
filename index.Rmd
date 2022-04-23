@@ -1,6 +1,90 @@
 ---
-title: "Visual Analytics"
+title: "ISSS608: Visual Analytics"
 description: |
- Welcome to the site. Hope you enjoy it!
+ You can find my work here!
 site: distill::distill_website
 ---
+
+
+```{r,echo=FALSE}
+packages=c('tidyverse','psych','rmarkdown','patchwork','ggpubr')
+for (p in packages){
+  if(!require(p,character.only=T)){
+    install.packages(p)
+  }
+  library(p,character.only = T)
+}
+
+```
+
+
+
+```{r,echo=FALSE}
+s1<-ggplot(data = diamonds, mapping = aes(x = clarity, y=x)) + geom_boxplot()+
+  theme_void()+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),legend.position="none")+
+  scale_y_continuous(NULL,breaks = NULL)+
+  scale_fill_brewer(palette="Set3")
+  
+
+s2<-ggplot(diamonds,aes(x=depth,color=cut))+
+  geom_density()+
+  theme_void()+
+  theme(axis.title.y=element_blank(),axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),legend.position="none")+
+  scale_y_continuous(NULL,breaks = NULL)
+
+s3<-ggplot(data = diamonds, mapping = aes(x = clarity)) + geom_bar(aes(fill = cut))+
+  theme_void()+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),legend.position="none")+
+  scale_y_continuous(NULL,breaks = NULL)+
+  scale_fill_brewer(palette="Set3")
+
+fair_diamonds <- diamonds %>%
+  filter(cut == "Fair")
+
+s5<-ggplot(data = iris, aes(x = Sepal.Length, y = Sepal.Width, color = Species)) + geom_point() + 
+  geom_line()+
+  theme_void()+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),legend.position="none")+
+  scale_y_continuous(NULL,breaks = NULL)
+
+s6<-ggplot(data = diamonds) +
+    geom_bar(mapping = aes(x = cut, fill = cut), width = 1, show.legend = FALSE) +
+    coord_polar() +
+  theme_void()+
+    labs(title = "", x = NULL, y = NULL)+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),legend.position="none")+
+  scale_y_continuous(NULL,breaks = NULL)
+
+s7<-ggplot(diamonds, aes(x = cut, y = price, fill = cut)) +
+  geom_violin() +
+  scale_y_log10()+
+  scale_fill_brewer()+
+  theme_void()+
+    labs(title = "", x = NULL, y = NULL)+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),legend.position="none")
+s8<-ggplot(diamonds, aes(cut, color)) +
+  geom_jitter(aes(color = cut), size = 0.5)+
+  theme_void()+
+    labs(title = "", x = NULL, y = NULL)+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),legend.position="none")
+  
+
+p<-(s3 + s2/s7) / (s1 + s5+s6)
+p
+```
+
