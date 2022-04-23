@@ -1,0 +1,425 @@
+---
+title: "Take Home Exercise 1"
+author: "Raunak Kapur"
+date: "4/22/2022"
+output: distill::distill_article
+---
+
+# Overview
+
+In this exercise, we will explore packages such as tidyverse and ggplot2 and perform visual analysis. We will study the demographic of the city of Engagement,Ohio,USA.
+
+While we do so, we will also aim to address some common issues such as why is Pie chart not a preferred graph for visual analysis and how we can understand the distribution better. 
+
+Each graph has been created in a step by step manner for the reader to understand the steps and the rationale behind each upgradation. 
+
+Reading the required packages:
+
+```{r}
+packages=c('tidyverse','psych','rmarkdown','ggmosaic','ggpubr')
+for (p in packages){
+  if(!require(p,character.only=T)){
+    install.packages(p)
+  }
+  library(p,character.only = T)
+}
+
+```
+
+
+### Challenges faced
+
+1. The data required some cleaning to make it visually appealing to the eyes.
+
+2. Since ggplot2 does not give us very aesthetically looking graphs, they have to modified rigorously.
+
+3. Datatype for columns such as HouseholdSize is an integer while it should be of nominal data type. This becomes a caveat while plotting a bargraph and needs to be converted to relevant data type to process it further.
+
+
+## Data
+
+Dataset: Participants.csv
+
+Source: https://vast-challenge.github.io/2022/
+
+```{r,echo=TRUE}
+data=read_csv("data/Participants.csv",show_col_types = FALSE)
+paged_table(data)
+```
+
+
+## Data cleaning
+
+<b>1. Regrouping Age</b>
+
+Understanding the distribution of age in the dataset
+
+```{r,echo=TRUE}
+ggplot(data,aes(x=age))+
+  geom_histogram(bins=10,fill="lightblue",colour="black")+
+  coord_flip()+
+  ggtitle("Distribution of Age")+
+  theme(plot.title = element_text(hjust=0.5))
+  
+```
+The age can be regrouped in the following categories: Below 30, 30-39, 40-49, 50 and above
+
+```{r,echo=TRUE}
+d<-data%>%mutate(agegroup=case_when(age<30~"Below 30",
+                                    
+                                    age>=30 &age<40~"30-39",
+                                    age>=40 &age<50~"40-49",
+                                    age>=50 ~"50 and above"))
+x_selected<-d%>%select(participantId,householdSize,haveKids,agegroup,educationLevel)
+paged_table(x_selected)
+```
+
+<b>2. Reordering haveKids</b>
+
+Instead of having values as True, False- it will be modified to 'WithKids' and 'WithoutKids' for better visualization
+
+```{r,echo=TRUE}
+
+d<-d%>%mutate('Kids_Reordered'=
+                case_when(haveKids=="TRUE"~"With Kids",
+                          haveKids=="FALSE"~"Without Kids"))
+paged_table(d)
+```
+
+## V1: Understanding the Age composition
+
+<b>Objective:</b>Observe the Age composition of the participants
+
+```{r,echo=TRUE}
+ggplot(d,aes(x=agegroup))+
+  geom_bar()+
+  ggtitle("Frequency of Age-Groups")+
+  theme(plot.title = element_text(hjust=0.5))
+```
+
+As a next step, the x axis would be arranged in the following order- Below 30, 30-39, 40-49 and 50 and above. Also, the colour of the bar to be changed to pink
+
+```{r,echo=TRUE}
+ggplot(d,aes(x=factor(agegroup,levels=c("Below 30","30-39","40-49","50 and above"))))+
+  geom_bar(fill="pink")
+```
+
+Adding a line and point graph to identify the trend in the frequency of age. And to get a better understanding, the graph would be labelled with the proportion of each of the age group.
+ 
+```{r,echo=TRUE}
+ggplot(d,aes(x=factor(agegroup,levels=c("Below 30","30-39","40-49","50 and above"))))+
+  geom_bar(fill="pink")+
+  geom_line(aes(group=1),stat="count",colour="darkblue")+
+  geom_point(aes(),stat="count",colour="black")+
+  geom_text(stat="count",aes(label=paste0(round(..count../sum(..count..)*100,2),"%")),vjust=-1)
+```
+
+Further adjustments
+
+1. Modifying the x and y labels
+
+2. Increasing the y limit to read the numbers 
+
+3. Changing the theme
+
+### Final Visualization
+```{r,echo=TRUE}
+
+ggplot(d,aes(x=factor(agegroup,levels=c("Below 30","30-39","40-49","50 and above"))))+
+  geom_bar(fill="pink")+
+  geom_line(aes(group=1),stat="count",colour="darkblue")+
+  geom_point(aes(),stat="count",colour="black")+
+  geom_text(stat="count",aes(label=paste0(round(..count../sum(..count..)*100,2),"%")),vjust=-1)+
+  ylim(0,350)+
+  xlab("Age Group")+
+  ylab("Frequency")+
+  ggtitle("How old is the crowd?") +
+  theme_classic()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+## V2: Education Status of the participants
+
+<b>Objective:</b> Understand the frequency and the proportion of qualifications of the participants
+
+
+```{r,echo=TRUE}
+ggplot(data = d,
+       aes(x=agegroup,fill=educationLevel))+
+  geom_bar()
+```
+
+Here it can be seen that the graph is plotted with respect to the frequency of specific age group. Since the frequency of age group is different,this kind of visualization does not give us a clarity on the proportion of Education Status.
+
+To rectify this issue, column chart would be used to plot the proportion of Education Status for each age group
+
+Creating a dataset where the count and percentage of the age group-education status combination is calculated.
+
+```{r,echo=TRUE}
+AgeGroup_EducationLevel<-d%>%group_by(agegroup,educationLevel)%>%tally()
+AgeGroup_EducationLevel<-AgeGroup_EducationLevel%>%
+  group_by(agegroup)%>%
+  mutate(Total=sum(n),percent=round(n*100/Total))%>%
+  ungroup()
+paged_table(AgeGroup_EducationLevel)
+```
+
+This dataset helps to understand the percentage value for each agegroup-educationlevel combination
+
+
+```{r,echo=TRUE}
+
+ggplot(data = AgeGroup_EducationLevel,
+       aes(x=factor(agegroup,levels=c("Below 30","30-39","40-49","50 and above")),y=percent,fill=educationLevel))+
+  geom_col()
+```
+
+Further adjustments: 
+
+1. Using geom_text(), perecantage of participants who have attained a particular level of education to be labelled.
+
+2. X,Y axis labels to be renamed
+
+3. Y axis can be made continuous
+
+4. Flipping the coordinates to make it visually appealing
+
+
+### Final visualization
+
+```{r,echo=TRUE}
+
+ggplot(data = AgeGroup_EducationLevel,
+       aes(x=factor(agegroup,levels=c("Below 30","30-39","40-49","50 and above")),y=percent,fill=educationLevel))+
+  geom_col()+
+  geom_text(aes(label=paste0(percent,"%")),position = position_stack(vjust = 0.5),size=3)+
+  theme(axis.text.x  = element_text(angle=0))+
+  scale_y_continuous(breaks = NULL)+
+  coord_flip()+
+  xlab("Age Group")+
+  ylab(NULL)+
+  ggtitle("How well educated are the participants?") +
+  theme_bw()+
+  guides(fill = guide_legend(title = "Education Level"),shape = guide_legend(override.aes = list(size = 0.5)))+
+  theme(plot.title = element_text(hjust = 0.5,size = 13),legend.title = element_text(size = 9),legend.text = element_text(size = 7))
+  
+```
+### Alternative Visualization
+
+Since there are 2 categorical variables in question, Mosaic plot can also be explored.
+
+```{r}
+ggplot(data = d) +
+  geom_mosaic(aes(x = product(agegroup), fill=educationLevel)) +
+  labs(title='How well educated are the participants?')+
+  ylab("")+
+  xlab("Age Group")+
+  guides(fill = guide_legend(title = "Education Level"),shape = guide_legend(override.aes = list(size = 0.5)))+
+  theme(plot.title = element_text(hjust = 0.5,size = 13),legend.title = element_text(size = 9),legend.text = element_text(size = 7))
+```
+
+## V3: Proportion of Household Size
+
+<b>Objective</b>: Compare the frequency of Household Size
+
+Here,both doughnut chart and bar graph can be explored to understand the better visualization technique to read and interpret the household size. 
+
+First,the dataset is grouped based on household size to get the count and the cumulative frequency (denoted as ymax). Post calculating the cummulative frequency, another column which will downshift the cummulative frequency will be created (denoted as ymin).
+
+These variables are used to create the doughnut chart. 
+
+```{r,echo=TRUE}
+x<-d%>%
+  group_by(householdSize)%>%
+  tally()%>%
+  ungroup()
+y<-x%>%mutate(`ymax`=cumsum(`n`/sum(`n`)))
+
+z=y%>%mutate(`ymin`=c(0,head(`ymax`,n=-1)))
+paged_table(z)
+```
+
+```{r,echo=TRUE}
+doughnutchart<-ggplot(z, aes(x=3,y=n, fill=as.character(householdSize))) +
+  geom_col(color = "black")
+doughnutchart
+```
+
+The graph is created using rectangular coordinates. Converting it to Polar coordinates
+
+
+```{r,echo=TRUE}
+doughnutchart<-ggplot(z, aes(x=3,y=n, fill=as.character(householdSize))) +
+  geom_col(color = "black") +
+     coord_polar(theta="y")
+doughnutchart
+```
+
+Adding x limits to create a doughnut chart
+
+
+```{r}
+doughnutchart<-ggplot(z, aes(x=3,y=n, fill=as.character(householdSize))) +
+  geom_col(color = "black") +
+     coord_polar(theta="y")+
+  xlim(c(2,4))
+doughnutchart
+```
+
+
+Further adjustments:
+
+1. Change the colour pallete
+
+2. Theme to be updated to theme_void() to remove the grid
+
+3. Legend Title to be modified 
+
+
+```{r}
+doughnutchart<-ggplot(z, aes(x=3,y=n, fill=as.character(householdSize))) +
+  geom_col(color = "black") +
+     coord_polar(theta="y")+
+  xlim(c(2,4))+
+  scale_color_brewer(palette=1) +
+  scale_fill_manual(values = c("#FFF7FB", "#D0D1E6",
+                               "#74A9CF"))+
+  theme_void()+
+  guides(fill = guide_legend(title = "Household Size"))+
+  ggtitle("Which has the highest frequency of Household Size?")+
+  theme(plot.title = element_text(hjust=0.5))
+doughnutchart
+```
+Seems like our question is still not answered!
+
+To understand the difference, bar graph with the same dataset and colour pallete would be created.
+
+```{r,echo=TRUE}
+doughnutchart<-ggplot(z, aes(x=3,y=n, fill=as.character(householdSize))) +
+  geom_col(color = "black") +
+     coord_polar(theta="y")+
+  xlim(c(2,4))+
+  scale_color_brewer(palette=1) +
+  scale_fill_manual(values = c("#FFF7FB", "#D0D1E6",
+                               "#74A9CF"))+
+  theme_void()+
+  guides(fill = guide_legend(title = "Household Size"))
+
+barchart<-ggplot(z, aes(x=as.character(householdSize),y=n)) +
+  geom_col(fill=c("#FFF7FB", "#D0D1E6","#74A9CF"))+
+  xlab("Household Size")+
+  ylab("")+
+  theme_classic()
+
+ggarrange(doughnutchart,barchart)
+
+```
+
+Even though the numbers are not labelled in the graphs, the doughnut graph does not help us in comparing the frequency of household size. Bar graph, on the other hand gives us a fair idea for comparison. 
+
+This can be because in case of doughnut chart, the count is quite similar to each other and there is no significant difference.
+
+Adding labels to make it more readable. 
+
+```{r,echo=TRUE}
+doughnutchart<-ggplot(z, aes(x=3,y=n, fill=as.character(householdSize))) +
+  geom_col(color = "black") +
+     coord_polar(theta="y")+
+  xlim(c(2,4))+
+  geom_text(aes(label=n),position = position_stack(vjust = 0.5)) +
+  scale_color_brewer(palette=1) +
+  scale_fill_manual(values = c("#FFF7FB", "#D0D1E6",
+                               "#74A9CF"))+
+  theme_void()+
+  guides(fill = guide_legend(title = "Household Size"))
+
+barchart<-ggplot(z, aes(x=as.character(householdSize),y=n)) +
+  geom_col(fill=c("#FFF7FB", "#D0D1E6","#74A9CF"))+
+  geom_text(aes(label=n),position = position_stack(vjust =0.5)) +
+  xlab("Household Size")+
+  ylab("")+
+  theme_classic()
+
+c<-ggarrange(doughnutchart,barchart)
+annotate_figure(c,top = text_grob("Doughnut vs Bar", 
+              face = "bold", size = 14))
+```
+
+## V4: Are People with kids happy?
+
+<b.Objective:</b> To observe if people with kids are happier than the ones who are childless
+
+Based on the dataset provided, this vital objective which has been running across the minds of all couples will be achieved using the boxplot and violin plot to understand the distribution amongst both the categories. 
+
+```{r,echo=TRUE}
+ggplot(data=d,aes(y=joviality,x=Kids_Reordered))+
+  geom_violin(fill="light blue")
+```
+
+Adding a boxplot to the graph
+
+```{r,echo=TRUE}
+ggplot(data=d,aes(y=joviality,x=Kids_Reordered))+
+  geom_violin(fill="light blue")+
+  geom_boxplot()
+
+```
+
+To understand the distribution of joviality amongst various interest groups, facet_wrap() would be used and would be arranged based on the number of interest groups.
+
+```{r,echo=TRUE}
+ggplot(data=d,aes(y=joviality,x=Kids_Reordered))+
+  geom_violin(fill="light blue")+
+  geom_boxplot()+
+  facet_wrap(~interestGroup)
+
+```
+
+Rearranging it in 2 rows by adding nrow=2
+
+```{r,echo=TRUE}
+ggplot(data=d,aes(y=joviality,x=Kids_Reordered))+
+  geom_violin(fill="light blue")+
+  geom_boxplot()+
+  facet_wrap(~interestGroup,nrow = 2)
+```
+
+Further adjustments:
+
+1. Adding mean to the box plot
+
+2. Tilting the x axis by 45 degree to make it more readable
+
+3. Graph title to be added
+
+### Final Visualization
+
+```{r,echo=TRUE}
+ggplot(data=d,aes(y=joviality*100,x=Kids_Reordered))+
+  geom_violin(fill="light blue")+
+  geom_boxplot()+
+  facet_wrap(~interestGroup,nrow = 2)+
+  geom_point(stat="summary",fun.y="mean",colour='red',size=1)+
+  xlab("")+
+  ylab("Joviality (*0.01)")+
+  theme(axis.text.x  = element_text(angle=0),plot.title = element_text(hjust = 0.5,size = 10))+
+  ggtitle("Are Participants with kids based on each interest group happy?")+
+  coord_flip()
+```
+
+
+
+## References
+
+1. Department of Statistics Singapore, Population Trends 2020
+
+https://www.singstat.gov.sg/-/media/files/publications/population/population2020.pdf
+
+2. R-Coder, R-Charts
+
+https://r-charts.com/
+
+3. VAST Challenge 2022 
+
+https://vast-challenge.github.io/2022/
+

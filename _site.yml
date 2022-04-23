@@ -1,7 +1,7 @@
 name: "ISSS608"
 title: "Visual Analytics"
 description: |
-  Visual Analytics
+  Creating data visualisation beyond default.
 output_dir: "_site"
 navbar:
   right:
@@ -9,4 +9,10 @@ navbar:
       href: index.html
     - text: "About"
       href: about.html
+  left:
+    - text: "Take Home Exercise"
+      menu:
+      - text: "Take Home Exercise 1"
+        href: th_ex/THE1.html
+    
 output: distill::distill_article
