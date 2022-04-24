@@ -218,14 +218,13 @@ ggplot(data = AgeGroup_EducationLevel,
 ```
 ### Alternative Visualization
 
-Since there are 2 categorical variables in question, Mosaic plot can also be explored.
-
+Since there are 2 categorical variables in question, Mosaic plot can also be explored.A mosaic plot can be understood intuitively: the entire rectangle represents 100% of the observations. The area of each mosaic piece shows the proportion of observations in that category combination. The rest basically works like a stacked bar chart, which should be familiar to the average reader.
 
 ```{r}
 d[['agegroup']]=factor(d[['agegroup']],levels=c("Below 30","30-39","40-49","50 and above"))
 ggplot(data = d) +
   geom_mosaic(aes(x = product(agegroup,educationLevel), 
-                  fill=agegroup)) +
+                  fill=agegroup))+
   labs(title='How well educated are the participants?')+
   ylab("Age Group")+
   xlab("Education Level")+
