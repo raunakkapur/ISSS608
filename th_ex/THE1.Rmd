@@ -1,7 +1,10 @@
 ---
 title: "Take Home Exercise 1"
-author: "Raunak Kapur"
+author: 
+  - name: "Raunak Kapur"
+    affiliation: "Singapore Management University"
 date: "4/22/2022"
+
 output: distill::distill_article
 ---
 
@@ -152,7 +155,7 @@ ggplot(data = d,
 
 Here it can be seen that the graph is plotted with respect to the frequency of specific age group. Since the frequency of age group is different,this kind of visualization does not give us a clarity on the proportion of Education Status.
 
-To rectify this issue, column chart would be used to plot the proportion of Education Status for each age group
+To rectify this issue, column chart would be used to plot the <b>proportion</b> of Education Status for each age group
 
 Creating a dataset where the count and percentage of the age group-education status combination is calculated.
 
@@ -171,7 +174,10 @@ This dataset helps to understand the percentage value for each agegroup-educatio
 ```{r,echo=TRUE}
 
 ggplot(data = AgeGroup_EducationLevel,
-       aes(x=factor(agegroup,levels=c("Below 30","30-39","40-49","50 and above")),y=percent,fill=educationLevel))+
+       aes(x=factor(agegroup,
+                    levels=c("Below 30","30-39","40-49","50 and above")),
+           y=percent,
+           fill=educationLevel))+
   geom_col()
 ```
 
@@ -191,17 +197,23 @@ Further adjustments:
 ```{r,echo=TRUE}
 
 ggplot(data = AgeGroup_EducationLevel,
-       aes(x=factor(agegroup,levels=c("Below 30","30-39","40-49","50 and above")),y=percent,fill=educationLevel))+
+       aes(x=factor(agegroup,levels=c("Below 30","30-39","40-49","50 and above")),
+           y=percent,
+           fill=educationLevel))+
   geom_col()+
-  geom_text(aes(label=paste0(percent,"%")),position = position_stack(vjust = 0.5),size=3)+
+  geom_text(aes(label=paste0(percent,"%")),
+            position = position_stack(vjust = 0.5),size=3)+
   theme(axis.text.x  = element_text(angle=0))+
   coord_flip()+
   xlab("Age Group")+
   ylab("% of participants")+
   ggtitle("How well educated are the participants?") +
   theme_bw()+
-  guides(fill = guide_legend(title = "Education Level"),shape = guide_legend(override.aes = list(size = 0.5)))+
-  theme(plot.title = element_text(hjust = 0.5,size = 13),legend.title = element_text(size = 9),legend.text = element_text(size = 7))
+  guides(fill = guide_legend(title = "Education Level"),
+         shape = guide_legend(override.aes = list(size = 0.5)))+
+  theme(plot.title = element_text(hjust = 0.5,size = 13),
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 7))
   
 ```
 ### Alternative Visualization
@@ -212,13 +224,17 @@ Since there are 2 categorical variables in question, Mosaic plot can also be exp
 ```{r}
 d[['agegroup']]=factor(d[['agegroup']],levels=c("Below 30","30-39","40-49","50 and above"))
 ggplot(data = d) +
-  geom_mosaic(aes(x = product(agegroup,educationLevel), fill=agegroup)) +
+  geom_mosaic(aes(x = product(agegroup,educationLevel), 
+                  fill=agegroup)) +
   labs(title='How well educated are the participants?')+
   ylab("Age Group")+
   xlab("Education Level")+
-  guides(fill = guide_legend(title = "Education Level"),shape = guide_legend(override.aes = list(size = 0.5)))+
+  guides(fill = guide_legend(title = "Education Level"),
+         shape = guide_legend(override.aes = list(size = 0.5)))+
   theme_bw()+
-  theme(plot.title = element_text(hjust = 0.5,size = 13),legend.title = element_text(size = 9),legend.text = element_text(size = 7))
+  theme(plot.title = element_text(hjust = 0.5,size = 13),
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 7))
 ```
 
 ## V3: Proportion of Household Size
@@ -329,7 +345,8 @@ doughnutchart<-ggplot(z, aes(x=3,y=n, fill=as.character(householdSize))) +
   geom_col(color = "black") +
      coord_polar(theta="y")+
   xlim(c(2,4))+
-  geom_text(aes(label=n),position = position_stack(vjust = 0.5)) +
+  geom_text(aes(label=n),
+            position = position_stack(vjust = 0.5)) +
   scale_color_brewer(palette=1) +
   scale_fill_manual(values = c("#FFF7FB", "#D0D1E6",
                                "#74A9CF"))+
@@ -338,7 +355,8 @@ doughnutchart<-ggplot(z, aes(x=3,y=n, fill=as.character(householdSize))) +
 
 barchart<-ggplot(z, aes(x=as.character(householdSize),y=n)) +
   geom_col(fill=c("#FFF7FB", "#D0D1E6","#74A9CF"))+
-  geom_text(aes(label=n),position = position_stack(vjust =0.5)) +
+  geom_text(aes(label=n),
+            position = position_stack(vjust =0.5)) +
   xlab("Household Size")+
   ylab("")+
   theme_classic()
@@ -402,10 +420,13 @@ ggplot(data=d,aes(y=joviality*100,x=Kids_Reordered))+
   geom_violin(fill="light blue")+
   geom_boxplot()+
   facet_wrap(~interestGroup,nrow = 2)+
-  geom_point(stat="summary",fun.y="mean",colour='red',size=1)+
+  geom_point(stat="summary",
+             fun.y="mean",
+             colour='red',size=1)+
   xlab("Kids")+
   ylab("Joviality (*0.01)")+
-  theme(axis.text.x  = element_text(angle=0),plot.title = element_text(hjust = 0.5,size = 10))+
+  theme(axis.text.x  = element_text(angle=0),
+        plot.title = element_text(hjust = 0.5,size = 10))+
   ggtitle("Are Participants with kids based on each interest group happy?")+
   coord_flip()
 ```
