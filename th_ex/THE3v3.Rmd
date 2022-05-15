@@ -261,7 +261,11 @@ TrellisDisplay<-ggplot(ParticipantMonthlySavings,
   geom_line(aes(group=1))+
   xlab("Month")+
   ylab("Cost of living")+
-  facet_trelliscope(~ participantId,nrow=2,ncol=2,path=".",width=800)+
+  facet_trelliscope(~ participantId,
+                    nrow=2,ncol=2,
+                    path="trellis/",
+                    self_contained=TRUE,
+                    width=800)+
   theme(axis.text.x = element_text(size=6),
         axis.text.y = element_text(size=6))
 TrellisDisplay  
