@@ -250,7 +250,7 @@ ggplotly(lorenz)
 
 Let us plot a Trellis display to understand the cost of living of each and every participant
 
-```{r eval=FALSE}
+```{r}
 
 
 TrellisDisplay<-ggplot(ParticipantMonthlySavings,
