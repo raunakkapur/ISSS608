@@ -1,0 +1,396 @@
+---
+title: "Take Home Exercise 3"
+author: 
+  - name: "Raunak Kapur"
+    affiliation: "Singapore Management University"
+date: "5/15/2022"
+
+output: distill::distill_article
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Reading the packages
+
+```{r}
+packages=c('ggiraph', 'plotly', 'rmarkdown','psych',
+             'DT', 'patchwork','gglorenz',
+             'gganimate', 'tidyverse',
+             'readxl', 'gifski', 'gapminder',
+             'treemap', 'treemapify','ggridges',
+             'rPackedBar','lubridate','trelliscopejs','remotes')
+for (p in packages){
+  if(!require(p,character.only=T)){
+    install.packages(p)
+  }
+  library(p,character.only = T)
+}
+
+```
+
+
+```{r}
+FinancialJournal=read_csv("data/FinancialJournal.csv",show_col_types = FALSE)
+Participants=read_csv("data/Participants.csv",show_col_types = FALSE)
+```
+
+# Data Cleaning
+
+1. Grouping the records in the month year format to calculate the monthly earnings and cost of living for each of the categories.
+
+```{r}
+PartMonthYear=FinancialJournal%>%
+  mutate(Year=as.numeric(year(timestamp)),
+         Month=as.character(timestamp,"%b %y"),
+         MonthNumeric=as.numeric(month(timestamp)))%>%
+  group_by(participantId,Year,Month,MonthNumeric,category)%>%
+  summarise(TotalAmount=sum(amount))
+paged_table(PartMonthYear)
+#DT::datatable(PartMonthYear)
+```
+
+Performing an inner join on the dataset with the Participant dataset to get the other attributes of the participants.
+
+```{r}
+ParticipantsFinancialJournal <- inner_join(x= PartMonthYear,
+                                           y= Participants, 
+                                           by= 'participantId')
+#DT::datatable(ParticipantsFinancialJournal)
+paged_table(ParticipantsFinancialJournal)
+```
+
+2. Total Expenses and Earnings for every participant
+
+Over the specified duration, we will calculate the total monthly expense, earnings and savings by the participants.
+
+```{r}
+ParticipantsFinancialJournalExpense=ParticipantsFinancialJournal%>%
+  filter(category!='Wage')%>%
+  group_by(participantId,Year,Month)%>%
+  summarise(Expense=sum(TotalAmount)*-1)
+
+ParticipantsFinancialJournalEarnings=ParticipantsFinancialJournal%>%
+  filter(category=='Wage')%>%
+  group_by(participantId,Year,Month)%>%
+  summarise(Earn=sum(TotalAmount))
+
+ParticipantsEarningsVsExpense <- left_join(
+  x= ParticipantsFinancialJournalExpense, 
+  y= ParticipantsFinancialJournalEarnings, 
+  by= c('participantId'='participantId',
+        'Year'='Year',
+        'Month'='Month'))
+#ParticipantsEarningsVsExpense
+ParticipantMonthlySavings<-left_join(
+  x=ParticipantsEarningsVsExpense,
+  y=Participants,
+  by='participantId')%>%
+  mutate(Savings=Earn-Expense)
+
+
+ParticipantSavings<-
+  left_join(x=ParticipantMonthlySavings%>%
+  group_by(participantId)%>%
+  summarise(TotalSavings=sum(Savings),
+            TotalEarning=sum(Earn),
+            TotalExpense=sum(Expense)),
+  y=Participants,
+  by='participantId')
+
+paged_table(ParticipantSavings)
+
+
+```
+
+# How does the financial health of the residents change over a period covered by the dataset?
+
+To understand this, we will calculate the total amount in each of the categories for all the residents
+
+```{r}
+FinHealth=ParticipantsFinancialJournal%>%
+  group_by(Year,Month,category)%>%
+  summarise(TotalAmount=sum(TotalAmount))
+paged_table(FinHealth)
+
+```
+
+
+From this dataset, we will calculate the total of monthly expense and earnings in every month by the residents.
+
+Note: Here the Wage is taken up as Earnings and the rest of the categories are taken up as expenses.
+
+```{r}
+Expenditure=FinHealth%>%
+  filter(category!='Wage' & category!='RentAdjustment')%>%
+  group_by(Year,Month)%>%
+  summarise(Expense=sum(TotalAmount)*-1)
+  
+Earnings=FinHealth%>%
+  filter(category=='Wage')%>%
+  group_by(Year,Month)%>%
+  summarise(Earn=sum(TotalAmount))
+
+
+EarningsVsExpense <- inner_join(
+  x= Expenditure, 
+  y= Earnings, 
+  by= c('Year'='Year','Month'='Month'))
+
+```
+
+### Expenditure
+
+Now that we are able to understand the proportion in each month, let's try to understand the months in which the city noticed an uptick in expenditure.
+
+
+
+```{r}
+ExpensesTrellis<-ggplot(FinHealth%>%
+         filter(category!='Wage' & category!='RentAdjustment')%>%
+           group_by(Year,Month)%>%
+           mutate(percent=round(TotalAmount*100/sum(TotalAmount),2))%>%
+           ungroup(),
+       aes(x=factor(Month,
+                    levels=c("Mar 22","Apr 22","May 22","Jun 22","Jul 22","Aug 22","Sep 22",
+                             "Oct 22","Nov 22","Dec 22","Jan 23","Feb 23","Mar 23","Apr 23",
+                             "May 23")),
+           y=TotalAmount*-1,
+           fill=category,
+           shape=category,
+           text=paste("Total Amount: ", round(TotalAmount*-1,2),"<br>Category: ",category)))+
+  geom_point()+
+  scale_fill_brewer(palette="Set2")+
+  xlab("Month")+
+  ylab("Expenditure")+
+  ggtitle("How have been monthly expenses been?")+
+  coord_flip()+
+  theme_bw()
+
+ggplotly(ExpensesTrellis,tooltip = c("text"))
+```
+
+<b>Observations:</b>
+
+<ul>
+
+<li>Since April 2022, we see no change in the amount spent on Shelter and Education. This tells us the rent and education expense in the city have been constant over the months </li>
+
+<li>On zooming in, we can observe that the expense in recreation has increased during the on season (Dec and Jan). This makes sense because this is the year end time and people tend to spend more time with families/loved ones then </li>
+
+To understand this better, let us plot a ridge plot to understand the distribution of amount spent amongst the participants amongst those who have Kids and those don't and check how the expense are during on and off seasons
+
+```{r}
+ggplot(ParticipantMonthlySavings%>%filter(Month=="Nov 22" | 
+                                            Month=="Dec 22"| 
+                                            Month =="Jan 23" | 
+                                            Month =="Feb 23")) +
+  geom_density_ridges_gradient(aes(y = haveKids, 
+                                   x = Expense,fill=stat(x)),
+                               scale = 1, 
+                               rel_min_height = 0.01,
+                               bandwidth=80)+
+  scale_fill_viridis_c(name = "Amount", option = "C")+
+  xlab("Amount")+
+  ylab("Kids")+
+  facet_grid(~factor(Month,levels=c("Nov 22","Dec 22","Jan 23","Feb 23")))+
+  ggtitle("Expenses during the On vs Off season")+
+  labs(caption="Source: https://r-graph-gallery.com/ridgeline-plot.html")+
+  theme(axis.title.y=element_text(angle=0))
+
+```
+
+As we can see that, we see a wider spread in expenses as kids may want to try out the recretional activities during the winter break (Dec 22 and Jan 22) and hence a rise in recretional amount expenditure. 
+
+With the help of interactivity, we are able to follow the principle <i>Over first, zoom and filter and detail on-demand.</i>
+
+</ul>
+
+### Earning
+
+A Lorenz curve is a graphical representation of the distribution of income or wealth within a population. 
+
+Plotting one to understand the distribution of income.
+
+```{r}
+lorenz<-ggplot(ParticipantSavings%>%
+             select(participantId,
+                    TotalEarning)%>%
+             pivot_longer(-1)) +
+  stat_lorenz(aes(value,color=name),
+              show.legend = FALSE)+
+  coord_fixed()+
+  theme_minimal()+
+  theme(legend.title= element_blank())+
+  ggtitle("Inequality amongst participants")+
+geom_abline(linetype = "dashed")+
+  xlab("Cummulative Percentage of Participants")+
+  ylab("Cummulative Percentage of Amount")+
+  scale_color_manual(values=c('darkgreen','blue'))+
+  labs(caption="Source: https://www.investopedia.com/terms/l/lorenz-curve.asp")
+
+  #scale_color_manual(labels = c("Earnings", "Savings","Expense"))+
+
+ggplotly(lorenz)
+```
+
+<b>Observations</b>
+
+<ul>
+
+<li>The income distribution in Engagaement city tells us that 50% of the population takes in 25% of the city's income.</li>
+
+<li> The absolute line gives us an ideal scenario where the 50% of the population takes in 50% of the city's income</li>
+
+</ul>
+
+### Financial health of every participant
+
+Let us plot a Trellis display to understand the cost of living of each and every participant
+
+```{r eval=FALSE}
+
+
+TrellisDisplay<-ggplot(ParticipantMonthlySavings,
+                       aes(y = Expense, x = factor(Month,
+                    levels=c("Mar 22","Apr 22","May 22","Jun 22","Jul 22","Aug 22","Sep 22",
+                             "Oct 22","Nov 22","Dec 22","Jan 23","Feb 23","Mar 23","Apr 23",
+                             "May 23"))))+
+  geom_line(aes(group=1))+
+  xlab("Month")+
+  ylab("Cost of living")+
+  facet_trelliscope(~ participantId,nrow=2,ncol=2,path=".",width=800)+
+  theme(axis.text.x = element_text(size=6),
+        axis.text.y = element_text(size=6))
+TrellisDisplay  
+
+```
+
+<b>Observations</b>
+
+<ul>
+<li>On scrolling through each and every participant, we see that the cost of living over the months may vary or stay constant</li>
+<li>On choosing joviality as one of the filters, we can see those whose cost of living is nearing a straight line over the months are <b>happier</b> than the ones whose cost of living fluctuate</li>
+<li>The cost of living may not stay constant when you have kids in the house</li>
+</ul>
+
+# Are there groups that exhibit similar patterns?
+
+The trellis plot above brings a very interesting relation between happiness and cost of living and here we can figure out the reason behind the happiness
+
+### Do we see a correlation between joviality and cost of living?
+
+By plotting scatter plots of total earnings, cost of living with joviality, we can see if people who earn more or spend less are happier.
+
+To get a better understanding, we can split this based on the household size to see if people with kids who earn more and spend less are more likely to be happy.
+
+```{r}
+z <- highlight_key(ParticipantSavings)
+Er <- ggplot(data=z, 
+            aes(x = TotalEarning,
+                y = joviality,
+                color=as.character(householdSize),
+                text=paste("Earning: ",round(TotalEarning,2),
+                           "<br>Joviality: ",round(joviality,2),
+                           "<br>Household Size: ",householdSize))) +
+  geom_point(size=1)+
+  xlab("Earning")+
+  ylab("Joviality")
+
+Ex <- ggplot(data=z, 
+            aes(x = TotalExpense,
+                y = joviality,
+                color=as.character(householdSize),
+                text=paste("Expense: ",round(TotalExpense,2),
+                           "<br>Joviality: ",round(joviality,2),
+                           "<br>Household Size: ",householdSize))) +
+  geom_point(size=1)+
+  ggtitle("Can money buy happiness?")+
+  theme(legend.position="none")
+
+FB<-highlight(subplot(ggplotly(Er,tooltip = c("text")),ggplotly(Ex,tooltip = c("text"))),"plotly_selected")
+crosstalk::bscols(FB,DT::datatable(z,options = list(
+  columnDefs = list(list(className = 'dt-center', targets = 5)),
+  pageLength = 10,
+  autoWidth = TRUE,
+  scrollX = T,
+  lengthMenu = c(5, 10, 15, 20))),
+                  widths = c(12,12))
+
+```
+
+With the help of coordinated graph, we can highlight over unusual patterns and the table below can help us understand the attributes of the record(s) highlighted.
+
+<b>Observations</b>
+<ul>
+<li>Raising kids in the city is expensive which also comes in with motivation to earn more. As stated in the graphs, participants with kids tend to earn more and are not that happy as well compared to individuals with no kids</li>
+
+<li>Participants who are earning more are not necessarily spending more. Since the cost of living is managable, participants may look out for saving opportunities</li>
+</ul>
+
+
+# Cost of living amongst interest groups
+
+```{r}
+A<-ggplot(ParticipantsFinancialJournal%>%
+         filter(category!="Wage" & category!="RentAdjustment")%>%
+  group_by(Year,MonthNumeric,interestGroup)%>%
+  summarise(X=sum(TotalAmount)*-1)%>%
+  mutate(rank=min_rank(-X)*1,
+         MonthYear = factor(paste(MonthNumeric, Year, sep="-"))), 
+       aes(factor(rank,levels=c("10","9","8","7","6","5","4","3","2","1")),
+           group=interestGroup,
+           fill=as.factor(interestGroup),
+           color=as.factor(interestGroup))) +
+  
+  geom_col(aes(y = X,width=.9),alpha=0.8,show.legend = FALSE) +
+  geom_text(aes(y=0,label=paste(interestGroup," ")),hjust=-1,color="black")+
+  
+  scale_size(range = c(2, 12)) +
+  coord_flip(clip = "off",expand = FALSE)+
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = 'Cost of living in the month: {closest_state}', 
+       x = 'Interest Group', 
+       y = 'Cost of living') +
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0, size = 15),
+        axis.ticks.y = element_blank(),  # These relate to the axes post-flip
+        axis.text.y  = element_blank(),  # These relate to the axes post-flip
+        plot.margin = margin(1,1,1,4, "cm"))+
+  transition_states(MonthYear, transition_length = 1, state_length = 1)+
+  #transition_time(factor(Month,levels=c("Mar 22","Apr 22","May 22","Jun 22","Jul 22","Aug 22",
+                                  #"Sep 22","Oct 22","Nov 22","Dec 22","Jan 23","Feb 23",
+                                   #"Mar 23","Apr 23","May 23")))+
+  ease_aes('linear')
+
+animate(A, fps = 25, duration = 20, width = 800, height = 600)
+```
+
+<b>Observations</b>
+
+<ul>
+<li>Over the months we can see that the cost of living of members in interest group F and J had a more 'expensive' lifestyle compared to other interest group members</li>
+<li>Members in Interest Group A,G,H saw a fluctuation in their cost of livings over the months.</li>
+<li>Members in Interest Group E spent the least over the 15 months period</li>
+</li>
+
+To understand why members in interest groups A,G,H have varying cost of living expenses, let us try to understand more about the members of these groups with the help of bar graph.
+
+```{r}
+InterestKids<-ggplot(Participants,aes(x=interestGroup,y=age))+
+  geom_boxplot()+
+  xlab("Interest Group")+
+  ylab("Age")+
+  geom_point(aes(text=paste("Interest Group: ",interestGroup,"<br>Age: ",round(age,2))),
+             stat="summary",
+             fun="mean",
+             colour='blue',size=1)+
+  ggtitle("Diversity in Interest Group")+
+  theme_bw()
+ggplotly(InterestKids,tooltip = c("text"))
+```
+
+<b>Observation:</b>
+<br>Looking at the diversity of the Interest groups, we see that members in interest group A,G,H are relatively young to compared to other group members. As youngsters, you may not have observe a constant monthly expense as youngster may go to pubs, restaurants, recreational activities more often. This also brings to an interesting observation- <i>Maybe the city does attract young crowd and can be a sprawling place for restaurants, pubs to set up their business.</i>
