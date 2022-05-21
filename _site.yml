@@ -22,4 +22,6 @@ navbar:
       menu:
       - text: "In Class Exercise 4"
         href: In_Class/InClass_4.html
+      - text: "In Class Exercise 6"
+        href: In_Class/InClass_6.html
 output: distill::distill_article
