@@ -1,0 +1,476 @@
+---
+title: "Take home exercise 4"
+description: |
+  Visualising and Analysing Daily Routines.
+author:
+  - name: Raunak Kapur 
+    affiliation: Singapore Management University
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+
+## Objective
+
+In this exercise, we will pick up 2 participants based on a relevant criteria and understand their daily routine activities.
+
+## Reading the package
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+packages = c('scales', 'viridis', 'animation','plotly','CGPfunctions',
+             'lubridate', 'ggthemes', 'gganimate','quantmod',
+             'gridExtra', 'tidyverse','patchwork','ggHoriPlot',
+             'readxl', 'knitr','plotly','hrbrthemes','ggrepel',
+             'data.table', 'ViSiElse','rmarkdown')
+for (p in packages){
+  if(!require(p, character.only = T)){
+    install.packages(p)
+  }
+  library(p,character.only = T)
+}
+
+```
+
+
+## Who are the lucky ones?
+
+```{r}
+ParticipantsList=read_csv("data/Participants.csv",show_col_types = FALSE)
+paged_table(ParticipantsList)
+```
+
+For our study, we can pick up 2 participants - The one who is quoted as the <b>happiest</b> one, and the one whose joviality equals the median of the dataset.
+
+```{r}
+happiest<-ParticipantsList%>%
+  select(participantId,haveKids,joviality)%>%
+  filter((joviality==max(joviality) | joviality==median(joviality)))
+paged_table(happiest)
+
+```
+
+Looking at the data set, we can set our objective as - <b><i>What makes the happiest person happy?</b></i>
+
+## Data Cleaning
+
+The files provided to us contain huge number of records. As a next step, we will perform the following process:-
+
+1. Combine all the files by using the map function.
+
+```{r eval=FALSE}
+logs_fread <- list.files(path = "~/Desktop/SMU/Courses/Visual Analytics/Data/VAST-Challenge-2022/Datasets/ActivityLogs/",
+                  pattern = "*.csv", 
+                  full.names = T) %>% 
+  map_df(~fread(.))
+```
+
+2. Save them in the RDS format
+
+```{r eval=FALSE}
+saveRDS(logs_fread, 'data/logs_fread.rds')
+```
+
+3. Read the RDS file
+
+```{r eval=FALSE}
+participants <- readRDS('data/logs_fread.rds')
+```
+ 
+
+4. Now that we have our participants, we can filter them out from the RDS file.
+
+```{r eval=FALSE}
+selectedParticipants<-participants%>%
+  filter(participantId==113 | participantId == 320)
+```
+5. Saving the filtered records in csv file.
+
+```{r eval=FALSE}
+fwrite(selectedParticipants, "data/SelectedParticipantsLog.csv")
+```
+
+6. This file now becomes our base file/input file on which we can perform our analysis.
+
+```{r}
+FilteredLog=read_csv("data/SelectedParticipantsLog.csv",show_col_types = FALSE)%>%select(-currentLocation)
+paged_table(FilteredLog)
+```
+
+## Visualization
+
+### An average day of our participants
+
+#### Data cleaning
+
+1. Adding a start time and end time against each of the participants. 
+
+```{r}
+StartEndTime<-FilteredLog%>%
+  mutate(Date=date(timestamp),
+    StartTime=format(timestamp,"%H:%M:%S"),
+         EndTime=timestamp+(5*60))
+paged_table(StartEndTime)
+```
+
+```{r}
+StartEndTime%>%filter(Date=="2022-03-01" | Date=="2022-03-05")
+```
+
+#### Visualization
+
+Choosing 01-03-2022 as our weekday and 05-05-2022 as weekend
+
+```{r fig.width=10}
+
+DailyGraph320<-ggplot(StartEndTime%>%
+                        filter(Date=="2022-03-01"),
+                      aes(x=timestamp, xend=EndTime, y=currentMode, yend=currentMode,color=sleepStatus,group=currentMode)) +
+  geom_segment(aes(group = seq_along(timestamp)),size=5)+
+  theme_bw()+
+  xlab("Time")+
+  ylab("Location")+
+  ggtitle("An average weekday")+
+  guides(fill = guide_legend(title = "Sleep Status"))+
+  facet_wrap(~participantId,nrow = 2)+
+  transition_reveal(timestamp)
+DailyGraph320<-animate(DailyGraph320,duration = 15)
+DailyGraph320
+```
+
+<b>Knowledge</b>
+<ul>
+<li>Part. 113 prioritizes sleep and sleeps for optimum duration</li>
+<li>Part 113 spends a considerable amount of time on recreational activities preparing herself for the next day ahead </li>
+<li>Part. 113 seems to be a morning person as she reaches her work place on time and completes a major portion of her work during the day. While Part. 320 on the other hand, seems to be a post lunch person as he pulls off a major portion during post lunch.</li>
+</ul>
+<b>Wisdom: </b> Sleep and recreational activities help rejuvenate and can lead to a happier life. Also starting off work early can wrap it as soon as possible and thus, can lead to a better work-life balance.
+
+
+```{r fig.width=10}
+
+DailyGraphWeekend<-ggplot(StartEndTime%>%filter(Date=="2022-03-05"),
+                      aes(x=timestamp, xend=EndTime, y=currentMode, yend=currentMode,color=sleepStatus,group=currentMode)) +
+  geom_segment(aes(group = seq_along(timestamp)),size=5)+
+  theme_bw()+
+  xlab("Time")+
+  ylab("Location")+
+  ggtitle("An average weekend")+
+  guides(fill = guide_legend(title = "Sleep Status"))+
+  facet_wrap(~participantId,nrow = 2)+
+  transition_reveal(timestamp)
+DailyGraphWeekend<-animate(DailyGraphWeekend,duration = 15)
+DailyGraphWeekend
+
+```
+
+<b>Knowledge</b>
+<ul>
+<li>Part. 113 seems to be an extrovert kind of person spending most of the time during weekends outdoors.</li>
+<li>Part. 320 on the other hand prefers Friday night over Saturday mornings. The city is popular for its night life and he may like to explore those </li>
+<li> Part. 320 goes back home only when he is prepared to sleep. </li>
+</ul>
+<b>Wisdom: </b> Recreation seems to have a positive impact on the mental health of a person. Also it is not advisable to travel sleepy as it can prove to be fatal. 
+
+This throws an interesting observation, how much do these participants prioritize recreational activities in a week compared to other activities such as travelling and visiting restaurants.
+
+### Is it all work and no play?
+
+#### Data cleaning
+
+```{r}
+StatusLogDetails<-FilteredLog%>%
+  group_by(participantId,date(timestamp),currentMode,hungerStatus,sleepStatus)%>%
+  tally()%>%
+  mutate(TotalTime=n*5)%>%
+  rename('Date'='date(timestamp)')%>%
+  mutate(Weekday=weekdays(Date),Month=zoo::as.yearmon(Date,"%Y %m"))
+
+paged_table(StatusLogDetails)
+```
+#### Visualization
+
+```{r}
+new= c("Participant Id: 113","Participant Id: 320")
+names(new) <- c("113", "320")
+daysactivity<-ggplot(StatusLogDetails%>%group_by(participantId,Weekday,currentMode)%>%
+                       summarise(Timespent=sum(TotalTime))%>%
+                       filter(currentMode!="AtHome"&  currentMode!="AtWork"), 
+       aes(x=factor(Weekday,levels=c("Monday","Tuesday",
+                                  "Wednesday","Thursday",
+                                  "Friday","Saturday","Sunday")), 
+           currentMode, 
+           fill = Timespent)) + 
+geom_tile(aes(text=paste("Total Time: ",Timespent)),color = "white", 
+          size = 0.1,lwd = 1.5,linetype = 1) + 
+coord_equal() +
+  scale_fill_gradient2(low = "#075AFF",
+                       mid = "#FFFFCC",
+                       high = "#FF0000")+
+labs(x = NULL, 
+     y = NULL, 
+     title = "Is it all work and no play?") +
+  facet_wrap(~participantId,labeller = labeller(participantId=new))+
+  theme_ipsum()+
+  guides(fill = guide_colourbar(barwidth = 0.5,
+                                barheight = 5))+
+theme(axis.ticks = element_blank(),
+        axis.text.x = element_text(size = 7,angle=90),
+      axis.text.y = element_text(size = 7),
+        plot.title = element_text(hjust = 0.5),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size = 6))
+daysactivity
+```
+
+<b>Knowledge</b>
+<ul>
+<li>Participant 113 focused more on refreshing herself during the weekends as it is evident from the analysis by opting for recreational activities.</li>
+<li>Travelling can be a cumbersome task and since Part. 113 does not travel that much, as a result, she may get more time to focus at home and work.</li>
+
+</ul>
+
+
+<b>Wisdom</b> All work and no play makes Jack a dumb boy. It is necessary to do some recreational activity to refresh yourself and that could be the reason behind high joviality of 113
+
+Now that we have seen that Part.113 spends more time at home and at work, can we observe a work life balance?
+
+### Work-Life Balance
+
+We can determine this by figuring out how much time part.113 and part.320 get to spend at home.
+
+#### Data cleaning
+
+1. Grouping the log by ParticipantId, Date and current Mode.
+
+```{r}
+DailyCurrentModeTime=StatusLogDetails%>%group_by(participantId,Date,currentMode)%>%
+  summarise(Timespent=sum(TotalTime))%>%mutate(Month=zoo::as.yearmon(Date,"%Y %m"))
+paged_table(DailyCurrentModeTime)
+```
+
+2. To create a candle stick graph, we will go on to calculate the following: 
+<ul>
+<li> Open Time Spent:Time spent on the activities at the <i>start of the month</i></li>
+<li> Close Time Spent:Time spent on any of the activities at the <i>end of the month</i>.</li>
+<li> High Time Spent: Most amount of time spent during the month.</li>
+<li> Low Time Spent: Least amount of time spent during the month.</li>
+</ul>
+    
+```{r}
+Open=DailyCurrentModeTime%>%group_by(participantId,Month,currentMode)%>%
+  filter(day(Date)==max(day(Date)))%>%
+  group_by(participantId,Month,currentMode)%>%
+  summarise(OpenTimeSpent=sum(Timespent))
+
+Close=DailyCurrentModeTime%>%group_by(participantId,Month,currentMode)%>%
+  filter(day(Date)==min(day(Date)))%>%
+  group_by(participantId,Month,currentMode)%>%
+  summarise(CloseTimeSpent=sum(Timespent))
+
+High=DailyCurrentModeTime%>%group_by(participantId,Month,currentMode)%>%
+                       summarise(HighTimespent=max(Timespent))
+
+Low=DailyCurrentModeTime%>%group_by(participantId,Month,currentMode)%>%
+                       summarise(LowTimespent=min(Timespent))
+
+
+CandlestickData=left_join(High, Low, by= c('participantId'='participantId',
+        'Month'='Month',
+        'currentMode'='currentMode')) %>%
+                left_join(., Open, by=c('participantId'='participantId',
+        'Month'='Month',
+        'currentMode'='currentMode'))%>% left_join(., Close, by=c('participantId'='participantId',
+        'Month'='Month',
+        'currentMode'='currentMode'))
+
+paged_table(CandlestickData)
+```
+
+
+```{r}
+
+CSD320 <- CandlestickData%>%mutate(MonthUpdated=as.factor(Month))%>%
+  filter(participantId=="320" & currentMode=="AtHome") %>% 
+  plot_ly(x = ~MonthUpdated, type="candlestick",
+          open=~OpenTimeSpent,close=~CloseTimeSpent,
+          high=~HighTimespent,low=~LowTimespent) 
+CSD113 <- CandlestickData%>%mutate(MonthUpdated=as.factor(Month))%>%
+  filter(participantId=="113" & currentMode=="AtHome") %>% 
+  plot_ly(x = ~MonthUpdated, type="candlestick",
+          open=~OpenTimeSpent,close=~CloseTimeSpent,
+          high=~HighTimespent,low=~LowTimespent)
+
+fig <- subplot(CSD320, CSD113,nrows=2,shareX=TRUE) %>% 
+  layout(title = 'Time spent at home',annotations = list( 
+  list( 
+    x = 0.2,  
+    y = 1.0,  
+    text = "Participant Id: 320",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  ),  
+  list( 
+    x = 0.2,  
+    y = 0.5,  
+    text = "Participant Id: 113",  
+    xref = "paper",  
+    yref = "paper",  
+    xanchor = "center",  
+    yanchor = "bottom",  
+    showarrow = FALSE 
+  )))
+fig
+
+
+```
+
+<b>Knowledge</b>
+<ul>
+<li>Part. 113 seems to have spent a considerable amount of time which relates to a good work life balance. </li>
+<li>The End of quarters seems to be a busy month for all</li>
+</ul>
+
+<b>Wisdom: </b>A good work life balance and spending quality time at home can lead to a better mental and physical health
+
+### Are they sleeping enough?
+
+We looked at the activities in an average day. We can now deep dive and explore how much have they been sleeping
+
+#### Data Preparation
+
+To create a heat map, we will determine the cut points by calculating the outliers, origin and scale. 
+
+```{r}
+cutpoints <- StatusLogDetails%>%group_by(participantId,Date,sleepStatus)%>%
+                       summarise(Timespent=sum(TotalTime))%>%
+                       filter(sleepStatus=="Sleeping")  %>% 
+  mutate(
+    outlier = between(
+      Timespent, 
+      quantile(Timespent, 0.25, na.rm=T)-
+        1.5*IQR(Timespent, na.rm=T),
+      quantile(Timespent, 0.75, na.rm=T)+
+        1.5*IQR(Timespent, na.rm=T))) %>% 
+  filter(outlier)
+
+ori <- sum(range(cutpoints$Timespent))/2
+sca <- seq(range(cutpoints$Timespent)[1], 
+           range(cutpoints$Timespent)[2], 
+           length.out = 7)[-4]
+```
+
+#### Visualization
+
+```{r}
+ggplot(StatusLogDetails%>%group_by(participantId,Date,sleepStatus)%>%
+                       summarise(Timespent=sum(TotalTime))%>%
+                       filter(sleepStatus=="Sleeping")) +
+  geom_horizon(aes(Date,
+                   Timespent,
+                   fill = ..Cutpoints..), 
+               origin = ori, horizonscale = sca) +
+  scale_fill_hcl(palette = 'RdBu', reverse = T) +
+  facet_grid(participantId~.) +
+  theme_few() +
+  theme(
+    panel.spacing.y=unit(0, "lines"),
+    strip.text.y = element_text(size = 7, angle = 0, hjust = 0),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.border = element_blank(),
+    axis.text.x = element_text(size = 7, angle = 90, hjust = 0)
+    ) +
+  scale_x_date(expand=c(0,0), 
+               date_breaks = "1 month", 
+               date_labels = "%b %Y") +
+  xlab('Month') +
+  ggtitle('How important is sleep?', 
+          'Monitoring sleep duration for both the participants')
+
+```
+
+<b>Knowledge</b>
+<ul>
+<li>Clearly Part 113 prioritizes sleep the right amount. The graph suggests that she has been sleeping to stay awake, work and ensure a healthy life</li>
+<li> Part. 320 can focus more on sleep which can lead to better joviality index</li>
+</ul>
+
+<b>Wisdom:</b> Right amount of sleep can lead to a happier and healthy life :)
+
+### Can money turn a frown upside down?
+
+Here we are going to study the effect of available balance on the participants over the months and figure if more money equals to a happier life.
+
+#### Data Cleaning
+
+Filtering out 3 months- Mar 2022, Dec 2022 and May 2023 to notice the effect of available balance. 
+
+```{r}
+df<-FilteredLog%>%mutate(Month=as.character(zoo::as.yearmon(timestamp,"%Y %m")))%>%
+  group_by(participantId,Month)%>%
+  filter(timestamp==max(timestamp))%>%
+  filter(Month=="Mar 2022" |Month=="Dec 2022" |Month=="May 2023")%>%
+  mutate(availableBalance=round(availableBalance,2))
+paged_table(df)
+```
+
+#### Visualization
+
+```{r}
+ggplot(data = df, aes(x = factor(Month,
+                                 levels=c("Mar 2022","Dec 2022","May 2023")), 
+                      y = availableBalance, 
+                      group = participantId)) +
+  geom_line(aes(color = participantId, alpha = 1), size = 2) +
+  geom_point(aes(color = participantId, alpha = 1), size = 4) +
+  geom_text_repel(data = df %>% filter(Month == "Mar 2022"), 
+                  aes(label = paste0(participantId, " - ", availableBalance)) , 
+                  hjust = "left", 
+                  fontface = "bold", 
+                  size = 4, 
+                  nudge_x = -.45, 
+                  direction = "y") +
+  geom_text_repel(data = df %>% filter(Month == "May 2023"), 
+                  aes(label = paste0(participantId, " - ", availableBalance)) , 
+                  hjust = "right", 
+                  fontface = "bold", 
+                  size = 4, 
+                  nudge_x = .5, 
+                  direction = "y")+
+  scale_x_discrete(position = "top")+
+  theme_bw() +
+  theme(legend.position = "none",
+        panel.border     = element_blank(),
+  axis.title.y     = element_blank(),
+  axis.text.y      = element_blank(),
+  panel.grid.major.y = element_blank(),
+  panel.grid.minor.y = element_blank(),
+  axis.title.x     = element_blank(),
+  panel.grid.major.x = element_blank(),
+  axis.text.x.top      = element_text(size=12),
+  axis.ticks       = element_blank(),
+  plot.title       = element_text(size=14, face = "bold", hjust = 0.5),
+  plot.subtitle    = element_text(hjust = 0.5)) +
+  labs(
+    title = "The rise/fall of balance",
+    subtitle = "Available balance across months*",
+    caption = "*The balance is captured on the last day of the said months"
+  )
+
+```
+
+<b>Knowledge</b>
+<ul>
+<li> The available balance seems to be increasing over the months for both the participants. This aligns with our observation in the previous Take Home Exercise- the cost of living at Engagement is not that expensive and can be a great place for people to work and save.</li>
+<li> Part. 320 clearly holds a better bank balance than Part. 113 over the months which tells us that Part. 320 seems to be more financially stable than 113. </li>
+</ul>
+
+<b>Wisdom:</b> It is not necessary that a better bank balance can lead to more jovial life. Healthy and balanced lifestyle plays a vital role.
