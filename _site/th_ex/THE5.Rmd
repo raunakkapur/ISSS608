@@ -1,0 +1,530 @@
+---
+title: "Take Home Exercise 5"
+description: |
+  Let's see what the maps have to say
+author:
+  - name: Raunak Kapur 
+    affiliation: Singapore Management University
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+# Objective
+
+The objective of this take home exercise is to understand the GeoVisualization using tmaps and answer some of the questions presented in the VAST Challenge 2022
+
+- Social Areas
+- Traffic areas
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setting up the scene
+
+```{r}
+packages = c('rmarkdown','sf','tmap','tidyverse','clock','lubridate','sftime','lwgeom')
+for (p in packages){
+  if(!require(p, character.only = T)){
+    install.packages(p)
+  }
+  library(p,character.only = T)
+}
+
+```
+
+Here we are reading the files in two formats- sf and csv. This is done so that functions such as inner join can be performed and also the data can be used to create tmaps.
+
+```{r}
+
+schoolscsv <- read_csv("data/Schools.csv")
+
+pubcsv<-read_csv("data/Pubs.csv")
+
+apartmentscsv<-read_csv("data/Apartments.csv")
+buildingscsv<-read_csv("data/buildings.csv")
+employerscsv<-read_csv("data/Employers.csv")
+restaurantcsv<-read_csv("data/Restaurants.csv")
+schools <- read_sf("data/Schools.csv", 
+                   options = "GEOM_POSSIBLE_NAMES=location")
+
+pubs<-read_sf("data/Pubs.csv", 
+                   options = "GEOM_POSSIBLE_NAMES=location")
+
+apartments<-read_sf("data/Apartments.csv", 
+                   options = "GEOM_POSSIBLE_NAMES=location")
+buildings<-read_sf("data/buildings.csv", 
+                   options = "GEOM_POSSIBLE_NAMES=location")
+employers<-read_sf("data/Employers.csv", 
+                   options = "GEOM_POSSIBLE_NAMES=location")
+restaurant<-read_sf("data/Restaurants.csv", 
+                   options = "GEOM_POSSIBLE_NAMES=location")
+```
+
+Reading the status logs
+
+```{r eval=FALSE}
+logs<-readRDS("data/logs_fread.rds")
+```
+
+To calculate the participants at restaurants, places of work, pubs, we are performing an inner join to get the exact location of the participant at a given instance.
+
+```{r eval=FALSE}
+
+PartatRestaurants<-inner_join(x=logs,
+          y=restaurantcsv,
+          by=c('currentLocation' = 'location'))
+
+PartatEmployers<-inner_join(x=logs,
+          y=employerscsv,
+          by=c('currentLocation' = 'location'))
+
+PartatPubs<-inner_join(x=logs,
+          y=pubcsv,
+          by=c('currentLocation' = 'location'))
+
+```
+
+Let us also go through the Participants file for us to revisit the age groups and educational background.
+
+```{r}
+Participants<-read_csv("data/Participants.csv")
+ParticipantsAgeRegrouped<-Participants%>%mutate(agegroup=case_when(age<30~"Below 30",
+
+                                    age>=30 &age<40~"30-39",
+                                    age>=40 &age<50~"40-49",
+                                    age>=50 ~"50 and above"))
+```
+
+
+### Checking for Sampling bias
+
+Before we continue with the data analysis, it is necessary for us to check for biasing. 
+Our objective here is to figure out if the data provided to us has any kind of Sampling bias. To verify this, we can look at the residential status of the participants. 
+
+Any sampling detected (for example- majority of the participants are residing in one side of the city) may affect our observations. 
+
+#### Data Preparation
+
+For this, we will use the logs to find out the count of participants in the apartments and map it with the corresponding building file.
+
+```{r eval=FALSE}
+PartatApartments<-logs%>%
+  distinct(apartmentId,participantId)%>%
+  group_by(apartmentId)%>%
+  tally()%>%
+  mutate(apartmentId=as.character(apartmentId))
+
+apartmentdetails<-left_join(apartmentscsv%>%
+                        mutate(apartmentId=as.character(apartmentId)),
+                        PartatApartments,
+                        by=c("apartmentId"="apartmentId"))
+
+buildingdetails<-apartmentdetails%>%
+  group_by(buildingId)%>%
+  summarise(residents=sum(n))
+write_csv(buildingdetails,"data/buildingdetails.csv")
+```
+
+2. Reading the building details file
+
+```{r}
+ReadingBuildingDetails<-read_csv("data/buildingdetails.csv")
+```
+
+3. Calculating the building occupancy
+
+```{r}
+buildingoccupancy<-left_join(buildings,
+                        ReadingBuildingDetails%>%
+                        mutate(buildingId=as.character(buildingId)),
+                        by=c("buildingId"="buildingId"))
+
+```
+
+#### Visualization
+
+```{r fig.height=10, fig.width=10}
+tmap_mode("plot")
+tm_shape(buildingoccupancy)+
+tm_polygons(col = "residents",
+           border.col = "grey",
+           style="cont",
+           palette = "Blues",
+           border.lwd = 1,
+           border.alpha = 0.5,
+           colorNA = "white")+
+  tm_layout(frame=F,
+            main.title = "Do we see any discrmination?",
+            main.title.size = 2,
+            legend.position = c("right","top"),
+            legend.height = 0.2,
+            legend.width = 0.2)+
+  tm_compass()+
+  tm_credits("Based on the sample of 1000 participants",
+             position = c("left","bottom"))
+```
+
+<b>Observations:</b>
+<ul>
+<li>When it comes to location, we can conclude that the data provided to us is quite diverse- we have the details of people staying in various parts of the city</li>
+<li>Talking about homogeneity (concentration of participants in a particular part of the city), we see that the data presented to us is quite uniform as we have a nearly equal number of residents in each part of the city.</li>
+</ul>
+
+
+Now that we can confirm that the data is quite uniform, we can begin with our analysis answering the following questions:- 
+
+<ol>
+<li>Can we say the places where most people live in are more socially happening?</li>
+<li>What is the traffic situation during the day if most of the people are staying close to their place of work?</li>
+</ol>
+
+# Data Visualization
+
+### Can we identify 'Silicon Valley' of Engagement?
+
+#### Data preparation
+
+Here we are going to study the commercially happening place of the city.Assuming that the working hours are 8 am - 8 pm
+
+1. Using the Employers file to figure out the activity during the day.
+
+```{r eval=FALSE}
+EmployeesAtWork<-PartatEmployers%>%
+  mutate(StartTime=format(timestamp,"%H:%M:%S"),
+                        weekday=weekdays(timestamp))%>%
+  filter(weekday!="Saturday" & weekday!="Sunday")%>%
+         mutate(AtWork=case_when(
+           StartTime>="08:00:00" & StartTime<="20:00:00"~"Yes",
+           TRUE~"No"
+         ))
+```
+
+2. Now that we have the Time Of Day, we will calculate the number of people at the particular point in the given instance using the group_by clause
+
+```{r eval=FALSE}
+QuantityOfPoints<-EmployeesAtWork%>%filter(AtWork=="Yes")%>%
+  group_by(currentLocation,participantId)%>%
+  tally()%>%
+  mutate(participantId=as.character(participantId))
+EmployeesEducationLevel<-left_join(QuantityOfPoints,ParticipantsAgeRegrouped%>%mutate(participantId=as.character(participantId)),
+        by=c("participantId"="participantId"))
+QuantityOfEmployeesEduLevel<-EmployeesEducationLevel%>%
+  group_by(currentLocation,educationLevel)%>%
+  tally()
+```
+
+3. Writing the data in csv format to convert it to sf format
+
+```{r eval=FALSE}
+write_csv(QuantityOfEmployeesEduLevel,"data/PartAtEmployers.csv")
+```
+
+4. Reading the file in sf format
+
+```{r}
+z_sf<-read_sf("data/PartAtEmployers.csv",options = "GEOM_POSSIBLE_NAMES=currentLocation")
+```
+
+#### Visualization
+
+```{r fig.height=10, fig.width=10}
+tmap_mode("plot")
+tm_shape(buildings)+
+tm_polygons(col = "white",
+           border.col = "grey",
+           border.lwd = 1) +
+  
+tm_shape(z_sf%>%mutate(n=as.numeric(n)))+
+  
+tm_dots(col="educationLevel",
+        size="n",
+        palette="Set1")+
+  tm_layout(main.title = "Where is the work?*",
+            
+    main.title.size = 2,
+            legend.height = 0.3,
+            legend.width = 0.3,
+            legend.outside = FALSE,
+            legend.position = c("right", "top"),
+            frame = FALSE)+
+  tm_compass()+
+  tm_credits("*Observed from Mon-Fri at 8 am-8 pm",
+             position=c("left", "bottom"))
+
+```
+
+<b>Observation:</b>
+<ul>
+<li>The central part of the city seems to be more commercially active as it has more number of employment opportunities</li>
+<li>The North Side on the other hand has more people working in. We see an establishment in particular where we most number of participants of various educational qualifications working.</li>
+<li>We see many people who have High School and/or college level education qualifications in the city and they seem to be concentrated in the central region. This tells us that these establishments may hire part time students who are pursing their higher education and want to earn some extra bucks.</li>
+</ul>
+
+
+### Weekday vs Weekend rush at the restaurants
+
+People like to dine out and enjoy meals. We can study and figure out what is footfall during the weekday and weekend.
+
+#### Data Preparation
+
+1. We can start off with creating a new column 'weekday' which tells us day of the week from the time stamp given and write the data in csv format.
+
+```{r eval=FALSE}
+PartatRestaurants_updated<-PartatRestaurants%>%
+  mutate(StartTime=format(timestamp,"%H:%M:%S"),
+                        weekday=weekdays(timestamp))%>%
+  group_by(weekday,restaurantId,currentLocation,foodCost)%>%
+  tally()%>%
+  mutate(Day=case_when(weekday != "Saturday" & weekday != "Sunday"~"Weekday",
+                          weekday=="Saturday" | weekday=="Sunday"~"Weekend"))
+
+
+write_csv(PartatRestaurants_updated,"data/w.csv")
+```
+
+2. Reading the file in sf format
+
+```{r}
+PartatRestaurants_updatedSF<-read_sf("data/w.csv",options = "GEOM_POSSIBLE_NAMES=currentLocation")
+```
+
+#### Visualization
+
+```{r fig.width=8}
+
+tmap_mode("view")
+tm_shape(buildings)+
+tm_polygons(col = "white",
+           border.col = "grey",
+           border.lwd = 1) +
+tm_shape(PartatRestaurants_updatedSF%>%
+           select(-weekday)%>%
+           mutate(n=as.numeric(n),
+                  restaurantId=as.character(restaurantId),
+                  foodCost=as.numeric(foodCost)))+
+tm_bubbles("n",col="foodCost",popup.vars=c("restaurantId"))+
+  tm_facets(c("Day"),nrow=1,ncol=2, sync = TRUE)
+```
+
+<b>Observations:</b>
+<ul>
+<li>People like to dine in at expensive places during the weekend as we can see a surge in the footfall in the weekend.</li>
+<li>The inexpensive restaurants must be near the employment sites as they seem to be more active during the weekdays than weekends</li>
+</ul>
+
+### Is it all work and no play?
+
+#### Data Preparation
+
+1. Selecting those participants who are at recreation
+
+```{r eval=FALSE}
+recreationalplaces<-logs%>%
+ filter(currentMode=="AtRecreation")%>%
+  distinct(currentLocation,participantId)
+write_csv(recreationalplaces,"data/PartRecreational.csv")
+```
+
+2. Checking to confirm if participants like to stay or travel between recreational spots by converting point to linestring using st_cast()
+
+```{r}
+R<-read_sf("data/PartRecreational.csv",options = "GEOM_POSSIBLE_NAMES=currentLocation")
+A<-R%>%distinct(currentLocation)
+l<-R%>%
+  group_by(participantId)%>%tally()%>%
+  filter(n>=2)%>%st_cast("LINESTRING")
+  
+PartAgeGroup<-left_join(l,ParticipantsAgeRegrouped%>%mutate(participantId=as.character(participantId)),
+        by=c("participantId"="participantId"))
+```
+
+#### Visualzation
+
+```{r}
+tmap_mode("view")
+tm_shape(buildings)+
+tm_polygons(col = "buildingType",
+           border.col = "grey",
+           border.lwd = 1)+
+tm_shape(PartAgeGroup)+
+  tm_lines(col="agegroup",
+           palette="Set2")+
+
+tm_shape(R)+
+  tm_dots()
+```
+
+<b>Observations:</b>
+<ul>
+First Impressions
+<ul>
+<li>We can identify major recreational places in the city as we find a high concentration of people on these places </li>
+<li>Youngsters (Below 30) are more fond of switching recreational places with time and exploring the city</li>
+</ul>
+</ul>
+
+<ul>
+On zooming in
+<ul>
+<li>When we say recreational places, they may not always mean places such as malls, pubs, cafe, etc</li>
+<li>The lines between points tell us something interesting- People across all age groups like to change their recreational spots. They do not like to stick to their nearest recreational spots and often opt for a change in place. </li>
+<li>To avoid this kind of concentration, the authorities can work on building more recreational spots which may decrease the traffic as well.</li>
+</ul>
+</ul>
+
+Now that we have introduced traffic, let us understand the traffic conditions in the city and how it can be addressed. 
+
+### Understanding the traffic conditions
+
+#### Data Preparation
+
+1. Based on the data set provided, we will filter those records where the current Mode is Transport, calculate the density using group_by and then write it in csv format.
+
+```{r eval=FALSE}
+
+Traffic<-logs%>%filter(currentMode=="Transport")%>%
+  mutate(StartTime=format(timestamp,"%H:%M:%S"),
+                        weekday=weekdays(timestamp),
+         TimeOfDay=case_when(
+           StartTime>="08:00:00" & StartTime<="09:00:00"~"Morning",
+           StartTime>="18:00:00" & StartTime<="19:00:00"~"Evening",
+         ))%>%group_by(TimeOfDay,currentLocation)%>%tally()
+write_csv(Traffic,"data/trafficdata.csv")
+```
+
+
+```{r}
+ReadingTrafficData<-read_sf("data/trafficdata.csv",options = "GEOM_POSSIBLE_NAMES=currentLocation")
+MorningTrafficData_updated<-ReadingTrafficData%>%mutate(n=as.numeric(n))%>%
+  filter(TimeOfDay=="Morning")
+EveningTrafficData_updated<-ReadingTrafficData%>%mutate(n=as.numeric(n))%>%
+  filter(TimeOfDay=="Evening")
+```
+
+#### Visualization 
+
+Since we are dealing with density, we will create a <b>box map</b>
+
+Creating a function which helps us determine the break points.
+
+```{r}
+boxbreaks <- function(v,mult=1.5) {
+  qv <- unname(quantile(v[[1]]))
+  iqr <- qv[4] - qv[2]
+  upfence <- qv[4] + mult * iqr
+  lofence <- qv[2] - mult * iqr
+  # initialize break points vector
+  bb <- vector(mode="numeric",length=7)
+  # logic for lower and upper fences
+  if (lofence < qv[1]) {  # no lower outliers
+    bb[1] <- lofence
+    bb[2] <- floor(qv[1])
+  } else {
+    bb[2] <- lofence
+    bb[1] <- qv[1]
+  }
+  if (upfence > qv[5]) { # no upper outliers
+    bb[7] <- upfence
+    bb[6] <- ceiling(qv[5])
+  } else {
+    bb[6] <- upfence
+    bb[7] <- qv[5]
+  }
+  bb[3:5] <- qv[2:4]
+  return(bb)
+}
+
+get.var <- function(vname,df) {
+  v <- df[vname] %>% st_set_geometry(NULL)
+  v <- unname(v[,1])
+  return(v)
+}
+
+
+breakss <- function(vnam, df, 
+                   legtitle=NA,
+                   mtitle="Box Map",
+                   mult=1.5){
+  var <- get.var(vnam,df)
+  bbb <- boxbreaks(var)
+return(bbb)  
+}
+
+
+```
+
+Plotting the map
+
+```{r fig.height=10, fig.width=10}
+
+tmap_mode("plot")
+MorningTraffic<-tm_shape(buildings)+
+tm_polygons(col = "buildingType",
+           border.col = "grey",
+           border.lwd = 1) +
+tm_shape(MorningTrafficData_updated)+
+  
+tm_dots(size=0.05,col="n",
+           border.lwd=NA,
+        breaks=breakss("n",MorningTrafficData_updated),
+        palette="Reds",
+        labels = c("lower outlier", 
+                     "< 25%", 
+                     "25% - 50%", 
+                     "50% - 75%",
+                     "> 75%", 
+                     "upper outlier"))+
+  tm_layout(main.title = "Morning Rush",
+            main.title.size = 2,
+            legend.height = 0.2,
+            legend.width = 0.2,
+            legend.outside = FALSE,
+            legend.position = c("right", "top"),
+            frame = FALSE)+
+  tm_credits("Morning peak: 8 am-9 am",
+             position=c("left","bottom"),
+             size=0.5)
+
+
+EveningTraffic<-tm_shape(buildings)+
+tm_polygons(col = "buildingType",
+           border.col = "grey",
+           border.lwd = 1) +
+tm_shape(EveningTrafficData_updated)+
+  
+tm_dots(size=0.05,col="n",
+           border.lwd=NA,
+        breaks=breakss("n",EveningTrafficData_updated),
+        palette="Reds",
+        labels = c("lower outlier", 
+                     "< 25%", 
+                     "25% - 50%", 
+                     "50% - 75%",
+                     "> 75%", 
+                     "upper outlier"))+
+  tm_layout(main.title = "Evening Rush",
+            main.title.size =2,
+            legend.height = 0.2,
+            legend.width = 0.2,
+            legend.outside = FALSE,
+            legend.position = c("right", "top"),
+            frame = FALSE)+
+  tm_credits("Evening peak: 6 pm-7 pm",
+             position=c("left","bottom"),
+             size=0.5)+
+  tm_compass()
+
+tmap_arrange(MorningTraffic,EveningTraffic,outer.margins = 0.02)
+
+```
+
+
+<b>Observations</b>
+<ul>
+<li>All the traffic seems to be concentrated on the commercial places in the morning and towards the residential places in the evenings.</li>
+<li>Most of the traffic seems to be concentrated towards the north east and south in the mornings
+and more on the central region in the evenings</li>
+<li>If the authorities decide to work on introducing local trains to address the bottlenecks, they can start off with their trial runs in such regions which are more commercially active</li>
+</ul>
+  
