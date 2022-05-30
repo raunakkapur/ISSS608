@@ -392,17 +392,18 @@ Traffic<-logs%>%filter(currentMode=="Transport")%>%
          TimeOfDay=case_when(
            StartTime>="08:00:00" & StartTime<="09:00:00"~"Morning",
            StartTime>="18:00:00" & StartTime<="19:00:00"~"Evening",
-         ))%>%group_by(TimeOfDay,currentLocation)%>%tally()
+         ))%>%group_by(weekday,TimeOfDay,currentLocation)%>%tally()
 write_csv(Traffic,"data/trafficdata.csv")
 ```
 
 
 ```{r}
 ReadingTrafficData<-read_sf("data/trafficdata.csv",options = "GEOM_POSSIBLE_NAMES=currentLocation")
-MorningTrafficData_updated<-ReadingTrafficData%>%mutate(n=as.numeric(n))%>%
-  filter(TimeOfDay=="Morning")
+MorningTrafficData_updated<-ReadingTrafficData%>%
+  mutate(n=as.numeric(n))%>%
+  filter(TimeOfDay=="Morning" & (weekday!="Saturday" | weekday!="Sunday"))
 EveningTrafficData_updated<-ReadingTrafficData%>%mutate(n=as.numeric(n))%>%
-  filter(TimeOfDay=="Evening")
+  filter(TimeOfDay=="Evening" & (weekday!="Saturday" | weekday!="Sunday"))
 ```
 
 #### Visualization 
