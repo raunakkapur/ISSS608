@@ -207,7 +207,10 @@ QuantityOfPoints<-EmployeesAtWork%>%filter(AtWork=="Yes")%>%
   group_by(currentLocation,participantId)%>%
   tally()%>%
   mutate(participantId=as.character(participantId))
-EmployeesEducationLevel<-left_join(QuantityOfPoints,ParticipantsAgeRegrouped%>%mutate(participantId=as.character(participantId)),
+EmployeesEducationLevel<-left_join(QuantityOfPoints,
+                                   ParticipantsAgeRegrouped%>%
+                                     mutate(
+                                       participantId=as.character(participantId)),
         by=c("participantId"="participantId"))
 QuantityOfEmployeesEduLevel<-EmployeesEducationLevel%>%
   group_by(currentLocation,educationLevel)%>%
@@ -523,7 +526,7 @@ tmap_arrange(MorningTraffic,EveningTraffic,outer.margins = 0.02)
 <b>Observations</b>
 <ul>
 <li>All the traffic seems to be concentrated on the commercial places in the morning and towards the residential places in the evenings.</li>
-<li>Most of the traffic seems to be concentrated towards the north east and south in the mornings
+<li>Most of the traffic seems to be concentrated towards the north west and south in the mornings
 and more on the central region in the evenings</li>
 <li>If the authorities decide to work on introducing local trains to address the bottlenecks, they can start off with their trial runs in such regions which are more commercially active</li>
 </ul>
