@@ -1,0 +1,529 @@
+---
+title: "Take Home Exercise 6"
+description: |
+  How well are they connected
+author:
+  - name: Raunak Kapur 
+    affiliation: Singapore Management University
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+# Objective
+
+Using the data provided to us by the VAST challenge, we aim to determine the social interactions in the city and get some insights
+
+# Setting the scene
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+packages = c('igraph', 'tidygraph','sf','sfnetworks',
+             'ggraph', 'visNetwork','sftime','lavaan',
+             'lubridate', 'clock','tmap','readr',
+             'tidyverse', 'graphlayouts')
+for(p in packages){
+  if(!require(p, character.only = T)){
+    install.packages(p)
+  }
+  library(p, character.only = T)
+}
+```
+
+
+```{r}
+graph_edges<-read_csv("data/SocialNetwork.csv")
+graph_nodes<-read_csv("data/Participants.csv")
+```
+
+# Visualization
+
+### What makes a happiest person happy
+
+We identified 2 people for our exercise to compare what makes the happiest person happy- Part 113 and Part 320. Let us study their interactions to see how actively do they interact with people.
+
+#### Data cleaning
+
+```{r}
+graph_edges_modified<-graph_edges%>%
+  mutate(Date=date(timestamp),Day=wday(timestamp))
+```
+
+```{r}
+graph_edges_grouped<-graph_edges_modified%>%
+  group_by(participantIdFrom,participantIdTo,Day)%>%
+  summarise(Weight=n())%>%
+  filter(participantIdFrom!=participantIdTo) %>%
+  filter(Weight > 1)%>%
+  filter(Day=="1")%>%
+  ungroup()%>%filter(participantIdFrom=="113" | participantIdFrom=="320")
+```
+
+```{r}
+selectDistinctRecordsTo<-graph_edges_grouped%>%distinct(participantIdTo)
+selectDistinctRecordsFrom<-graph_edges_grouped%>%distinct(participantIdFrom)
+```
+
+
+```{r}
+nodes_updated_To<-inner_join(graph_nodes,selectDistinctRecordsTo,
+                          by=c("participantId"="participantIdTo"))
+nodes_updated_From<-inner_join(graph_nodes,selectDistinctRecordsFrom,
+                          by=c("participantId"="participantIdFrom"))
+nodes_updated=bind_rows(nodes_updated_To,nodes_updated_From)%>%
+  mutate(name=as.character(participantId))
+
+```
+
+#### Visualization
+
+```{r}
+graph<-igraph::graph_from_data_frame(graph_edges_grouped, 
+                                     vertices = nodes_updated) %>% as_tbl_graph()
+ggraph(graph,layout = 'kk') +
+  geom_edge_link(aes(width=Weight),
+                 alpha=0.5) +
+  scale_edge_width(range = c(0.1, 5))+
+  geom_node_point(aes(colour = haveKids), 
+                  size = 3)+
+  geom_node_text(aes(label = name),size=1.5, repel=TRUE)
+```
+
+
+### Role of an influencer
+
+Let us create a network graph to notice the role of an influencer. Let us first figure out a popular personality
+
+```{r}
+
+MeanInteractions<-graph_edges%>%
+  distinct(participantIdFrom,participantIdTo)%>%
+  group_by(participantIdFrom)%>%
+  tally()%>%
+  ungroup()%>%
+  filter(n==max(n))
+
+```
+
+We can notice that Part 704 is the most influencial one as she has interacted with most number of participants 
+
+
+#### Data Preparation
+
+Keeping Part 704 as a parent node, we will first filter out all the interactions where the starting node is not 704. 
+
+```{r}
+
+Influencer_edge<-graph_edges%>%filter(participantIdTo!=704)%>%
+  group_by(participantIdFrom,participantIdTo)%>%
+  tally()%>%
+  mutate(Weight=n)%>%
+  filter(participantIdFrom!=participantIdTo)%>%
+  filter(Weight>1)%>%
+  ungroup()
+
+```
+
+
+By using the distinct function, we will create a table consisting of all nodes (vertices). 
+
+```{r}
+
+distinct_Influencer_To<-Influencer_edge%>%distinct(participantIdTo)
+distinct_Influencer_From<-Influencer_edge%>%distinct(participantIdFrom)
+Influencers_nodes_updated_To<-semi_join(graph_nodes,distinct_Influencer_To,
+                          by=c("participantId"="participantIdTo"))
+Influencers_nodes_updated_From<-semi_join(graph_nodes,
+                                          distinct_Influencer_From,
+                          by=c("participantId"="participantIdFrom"))
+nodes_updated_influencers=bind_rows(Influencers_nodes_updated_To, Influencers_nodes_updated_From)%>%
+  distinct(participantId,.keep_all = TRUE)
+
+
+```
+
+
+Using the igraph functionality, we create an igraph consisting of nodes, edges and calculate the central betweenness.
+
+
+```{r}
+
+influencers_graph<-igraph::graph_from_data_frame(Influencer_edge, 
+                                     vertices = nodes_updated_influencers) %>% 
+                                      as_tbl_graph()
+
+influencers_graph<-influencers_graph%>%
+  mutate(betweenness=centrality_betweenness())
+
+```
+
+Using the distribution function to understand the centrality_betweenness(). 
+
+```{r}
+
+ggplot(as.data.frame(influencers_graph),aes(x=betweenness))+
+  geom_histogram(bins=10,fill="lightblue",colour="black")+
+  ggtitle("Distribution of centrality betweenness")+
+  theme(plot.title = element_text(hjust=0.5))
+
+  
+    
+```
+
+
+Looking at this, we can filter our records where the centrality between is greater than 4000 to understand the interactions between those with whom 704 interactions the most and createa graph using the layout: graphopt.
+
+#### Visualisation
+
+```{r}
+ggraph(influencers_graph%>%filter(betweenness>4000), layout = "graphopt") + 
+  geom_node_point() +
+  geom_edge_link(aes(), alpha = 0.2) + 
+  scale_edge_width(range = c(0.2, 2)) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  labs(edge_width = "Letters") +
+  theme_graph()
+
+```
+
+
+Now that we have seen at the participant level, let us see how it is at the aprtment level with the help of Geographical layout.
+
+### Which is the most socially happening place?
+
+#### Data preparation
+
+Reading the status log file
+
+```{r eval=FALSE}
+logs<-readRDS("data/logs_fread.rds")
+ParticipantsApartments<-logs%>%distinct(participantId,apartmentId)
+write_csv(ParticipantsApartments,"data/ParticipantsApartments.csv")
+
+```
+
+Reading the apartments and building files in the sf format
+
+```{r}
+
+apartments<-read_sf("data/Apartments.csv",
+                    options = "GEOM_POSSIBLE_NAMES=location")
+buildings<-read_sf("data/Buildings.csv", 
+                   options = "GEOM_POSSIBLE_NAMES=location")
+ParticipantsApartments<-read_csv("data/ParticipantsApartments.csv")
+```
+
+Creating the interactions and the nodes file using the Social interactions file.
+
+```{r}
+
+
+Participants_Interactions_Grouped<-graph_edges%>%
+  group_by(participantIdFrom,participantIdTo)%>%
+  tally()
+
+Apartment_Interactions<-inner_join(Participants_Interactions_Grouped,
+                                   ParticipantsApartments,
+                                by=c("participantIdFrom"="participantId"))%>%
+  rename(apartmentIdFrom=apartmentId)%>%
+  inner_join(ParticipantsApartments,by=c("participantIdTo"="participantId"))%>%
+  rename(apartmentIdTo=apartmentId)%>%
+  mutate(apartmentIdTo=as.character(apartmentIdTo),
+         apartmentIdFrom=as.character(apartmentIdFrom))%>%
+  group_by(apartmentIdFrom,apartmentIdTo)%>%tally()%>%
+  filter(apartmentIdFrom!=apartmentIdTo)%>%
+  filter(n>1)
+
+apartments_nodes<-rbind(Apartment_Interactions%>%
+                        distinct(apartmentIdFrom)%>%
+                        rename(apartmentId=apartmentIdFrom),
+                        Apartment_Interactions%>%
+                        distinct(apartmentIdTo)%>%
+                          rename(apartmentId=apartmentIdTo))%>%
+  distinct(apartmentId)
+
+apartment_sf<-left_join(apartments_nodes,apartments%>%
+                          mutate(apartmentId=as.character(apartmentId)),
+                        by=c("apartmentId"="apartmentId"))%>%
+  select(apartmentId,location,rentalCost)%>%
+  mutate(rentalCost=as.integer(rentalCost))
+#apartment_sf=st_as_sf(apartment_sf)
+```
+
+
+Now that we have the AoartmentTo and ApartmentFrom, we can add the current locations to the interactions file and this will help us create the curved lines.
+
+
+```{r}
+
+apartment_interaction_location<-left_join(Apartment_Interactions,apartment_sf,
+                                by=c("apartmentIdFrom"="apartmentId"))%>%
+  rename(locationfrom=location)%>%
+  inner_join(apartment_sf,by=c("apartmentIdTo"="apartmentId"))%>%
+  rename(locationto=location)
+
+apartment_interaction_location=
+  rowid_to_column(apartment_interaction_location, "ID")
+
+```
+
+```{r,echo=FALSE,eval=FALSE}
+apartment_interaction_location_to<-apartment_interaction_location%>%
+  select(ID,locationto)%>%
+  rename(location=locationto)
+apartment_interaction_location_from<-apartment_interaction_location%>%
+  select(ID,locationfrom)%>%
+  rename(location=locationfrom)
+
+apartment_interaction_combine<-rbind(apartment_interaction_location_to,
+                                     apartment_interaction_location_from)
+
+apartment_interaction_combine<-st_as_sf(apartment_interaction_combine)
+apartment_lines<-apartment_interaction_combine%>%
+  group_by(ID)%>%tally()%>%
+  filter(n>=2)%>%st_cast("LINESTRING")
+
+```
+
+
+```{r fig.width=8, fig.height=8,echo=FALSE,eval=FALSE}
+
+tmap_mode("plot")
+tm_shape(buildings)+
+tm_polygons(col = "white",
+           border.col = "black",
+           style="cont",
+           palette = "Blues",
+           border.lwd = 1,
+           border.alpha = 0.5,
+           colorNA = "white")+
+  tm_shape(apartment_lines)+
+  tm_lines(col='grey')+
+   tm_shape(apartment_sf)+
+  tm_bubbles(col="rentalCost",size=0.5)
+
+```
+
+#### Visualization
+
+Using the ggplot to create the map, geom_curve() to create the interactions. Since the location coordinates were in sf format, st_coordinates is used to figure out the x and y axis.
+
+```{r eval=FALSE, echo= FALSE}
+
+apartment_graph<-igraph::graph_from_data_frame(Apartment_Interactions, 
+                                     vertices = apartment_sf)%>%
+  as_tbl_graph()
+
+
+node_pos <- apartment_sf %>%
+  mutate(x=st_coordinates(location)[,"X"],
+         y=st_coordinates(location)[,"Y"])%>%
+  select(x,y)%>%
+  ungroup()%>%
+  select(x,y)
+
+
+# node positions must be called x, y
+lay <- create_layout(apartment_graph, layout='manual',
+                     node.positions = node_pos)
+assert_that(nrow(lay) == nrow(nodes))
+# add node degree for scaling the node sizes
+lay$weight <- degree(g)
+
+
+```
+
+
+```{r fig.width=8,fig.height=8}
+  ggplot(buildings)+
+  geom_sf(fill="white",size=1)+
+  
+  geom_curve(data=apartment_interaction_location,
+             aes(x=st_coordinates(locationfrom)[,"X"],
+                 y=st_coordinates(locationfrom)[,"Y"],
+                 xend=st_coordinates(locationto)[,"X"],
+                 yend=st_coordinates(locationto)[,"Y"]),
+             curvature = 0.33, alpha = 0.2,color="gray")+
+  geom_point(data=apartment_sf,
+             aes(x=st_coordinates(location)[,"X"],
+                 y=st_coordinates(location)[,"Y"],
+                 color=rentalCost),alpha=2)+
+  scale_size_continuous(guide = FALSE, range = c(1, 6))+
+  ggtitle("Which area is socially active?")+
+  theme_void()
+
+```
+
+
+Observation:
+
+<ul>
+<li>Most of interactions seems to be towards the east side of the town. It seems tto be more socially active than the rest</li>
+<li>Looking at the rental cost, we can determine the elite class of the town. People staying in more expensive apartments tend to be richer than the rest. </li>
+<li>It is not that its not the elite class interacting with each other. We see quite a mix of interactions</li>
+</ul>
+
+
+### Interaction of graduates with others
+
+#### Data preparation
+
+```{r}
+graduates<-graph_nodes%>%filter(educationLevel=="Graduate")%>%
+  select(participantId)
+edges_grouped<-graph_edges%>%
+  mutate(Day=day(timestamp))%>%
+  group_by(participantIdFrom,participantIdTo)%>%
+  summarise(Weight=n())%>%
+  filter(participantIdFrom!=participantIdTo)%>%
+  filter(Weight>1)%>%
+  ungroup()
+```
+
+Creating the node datatable by using the distinct function. This is done with first finding the distinct values for all Start and End nodes and finally combining it using the rbind function
+
+```{r}
+distinct_To<-edges_grouped%>%distinct(participantIdTo)
+
+a<-semi_join(edges_grouped,
+            graduates,
+            by=c("participantIdFrom"="participantId"))
+
+distinct_From<-a%>%distinct(participantIdFrom)
+
+
+nodes_updated_To<-semi_join(graph_nodes,distinct_To,
+                          by=c("participantId"="participantIdTo"))
+nodes_updated_From<-semi_join(graph_nodes,distinct_From,
+                          by=c("participantId"="participantIdFrom"))
+nodes_updated_graduates=bind_rows(nodes_updated_To, nodes_updated_From)%>%distinct(participantId,.keep_all = TRUE)
+
+```
+
+
+#### Visualization
+
+```{r}
+
+graph_graduates<-igraph::graph_from_data_frame(a, 
+                                     vertices = nodes_updated_graduates) %>% 
+  as_tbl_graph()
+
+graph_graduates%>%
+  ggraph(layout = 'kk') +
+  geom_edge_link(aes(),
+                 alpha=0.5) +
+  geom_node_point(aes(color=educationLevel, 
+                  size = centrality_betweenness()))+theme_graph()
+```
+
+
+Observation: 
+
+We can see that the graduates (even though they talk to people across all educational background) like to communicate with those who are as qualified as they are.
+
+### Interaction of couples
+
+#### Data Preparation
+
+Filtering out those records were household size =2. This way we are filtering only couples.
+
+```{r}
+graph_nodes_couples<-graph_nodes%>%
+  filter(householdSize==2)
+```
+
+
+Further we go on to create the interaction (edges) file and with the the help of edges file, we wil identify the nodes involved by using the distinct function and combining the results using rbind ().
+
+```{r}
+couples_interaction<-graph_nodes%>%filter(householdSize==2)%>%
+  select(participantId)
+
+couples_edges_grouped<-graph_edges%>%
+  mutate(Day=wday(timestamp))%>%
+  group_by(participantIdFrom,participantIdTo)%>%
+  summarise(Weight=n())%>%
+  filter(participantIdFrom!=participantIdTo)%>%
+  filter(Weight>1)%>%
+  ungroup()
+
+Couples_edges<-semi_join(edges_grouped,
+            couples_interaction,
+            by=c("participantIdFrom"="participantId"))
+distinct_Couples_To<-Couples_edges%>%distinct(participantIdTo)
+distinct_Couples_From<-Couples_edges%>%distinct(participantIdFrom)
+Couples_nodes_updated_To<-semi_join(graph_nodes,distinct_Couples_To,
+                          by=c("participantId"="participantIdTo"))
+Couples_nodes_updated_From<-semi_join(graph_nodes,distinct_Couples_From,
+                          by=c("participantId"="participantIdFrom"))
+nodes_updated_couples=bind_rows(Couples_nodes_updated_To, Couples_nodes_updated_From)%>%distinct(participantId,.keep_all = TRUE)
+```
+
+
+#### Visualisation
+
+Creating the igraph and then using the centrality_degree() to determine the interactions. This is done by dividing it into 3 buckets- few, medium and many. 
+
+centrality_degree()<5 : few
+5<centrality_degree()<15: Medium
+centrality_degree()>15: Many
+
+```{r}
+
+graph_couples<-igraph::graph_from_data_frame(Couples_edges, 
+                                     vertices = nodes_updated_couples) %>% as_tbl_graph()
+
+
+
+graph_couples <- graph_couples %>% 
+  mutate(interaction = ifelse(
+    centrality_degree(mode = 'in') < 5, 'few',
+    ifelse(centrality_degree(mode = 'in') >= 15, 'many', 'medium')
+  ))
+
+graph_couples%>%
+  ggraph(layout = 'hive',axis=interaction) +
+  geom_edge_hive(aes(width=Weight),
+                 alpha=0.5) +
+  scale_edge_width(range = c(0.1, 5))+
+  geom_axis_hive(aes(colour = interaction), size = 2, label = FALSE)+
+  coord_fixed()+
+  theme_graph()
+
+```
+
+Observation: 
+
+The hive chart helps us understand the interactions when dividing it based on centrality degree. Looking at the interactions, we can create an interactive chart to understand the connections between couples. 
+
+Since we are dealing with VisNetwork, renaming Start and End nodes as 'from' and 'to'
+
+```{r}
+CE_Vis<-Couples_edges%>%rename(from=participantIdFrom,to=participantIdTo)
+CN_Vis<-nodes_updated_couples%>%rename(id=participantId)
+```
+
+#### Visualization
+
+```{r }
+visNetwork(CN_Vis,
+           CE_Vis) %>%
+  visIgraphLayout(layout = "layout_with_fr") %>%
+  visOptions(highlightNearest = TRUE,
+             nodesIdSelection = TRUE) %>%
+  visLegend() %>%
+  visLayout(randomSeed = 123)
+
+```
+
+This graph helps us identify the couples interaction using the appropiate filters.
+
+Observation;
+
+<ul>
+<li>Part. 621 does not interact with a lot except with Part. 314. This shows that the part. may not be socially interactive.</li>
+<li>Part. 419 on the other hand interacts with many people and can be termed as socially active compared to others</li>
+</ul>
